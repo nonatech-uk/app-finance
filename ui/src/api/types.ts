@@ -511,3 +511,17 @@ export interface TagSummaryItem {
 export interface TagSummaryList {
   items: TagSummaryItem[]
 }
+
+// ── Settings ──
+
+export interface SettingsResponse {
+  caldav_enabled: boolean
+  caldav_tag: string
+  caldav_password_set: boolean
+}
+
+export interface SettingsUpdate {
+  caldav_enabled?: boolean
+  caldav_tag?: string
+  caldav_password?: string
+}

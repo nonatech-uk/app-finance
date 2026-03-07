@@ -743,3 +743,18 @@ class TagSummaryList(BaseModel):
 
 class TagRename(BaseModel):
     new_name: str
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+
+
+class SettingsResponse(BaseModel):
+    caldav_enabled: bool
+    caldav_tag: str
+    caldav_password_set: bool  # never expose actual password
+
+
+class SettingsUpdate(BaseModel):
+    caldav_enabled: bool | None = None
+    caldav_tag: str | None = None
+    caldav_password: str | None = None  # empty string = disable auth

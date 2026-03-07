@@ -14,6 +14,7 @@ import Assets from './pages/Assets'
 import AssetDetail from './pages/AssetDetail'
 import TagRules from './pages/TagRules'
 import Tags from './pages/Tags'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/merchants" element={<Merchants />} />
             <Route path="/tags" element={<Tags />} />
             <Route path="/tag-rules" element={<TagRules />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<div className="text-text-secondary">Page not found</div>} />
           </Routes>
         </Shell>

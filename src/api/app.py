@@ -12,12 +12,13 @@ if _project_root not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from config.settings import settings
 from src.api.deps import close_pool, init_pool
 from src.api.routers import accounts, assets, auth, categories, imports, merchants, stats, stocks, tag_rules, transactions
+from src.api.routers import settings as settings_router
 
 STATIC_DIR = Path(_project_root) / "static"
 
@@ -56,11 +57,21 @@ app.include_router(imports.router, prefix="/api/v1", tags=["imports"])
 app.include_router(stocks.router, prefix="/api/v1", tags=["stocks"])
 app.include_router(assets.router, prefix="/api/v1", tags=["assets"])
 app.include_router(tag_rules.router, prefix="/api/v1", tags=["tag-rules"])
+app.include_router(settings_router.router, prefix="/api/v1", tags=["settings"])
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# CalDAV for Apple Reminders — serves todo-tagged transactions as VTODOs
+from src.caldav.routes import caldav_router, server_root_routes, well_known_routes  # noqa: E402
+
+# Well-known and root PROPFIND must be mounted before /caldav and SPA catch-all
+app.mount("/.well-known", well_known_routes)
+app.routes.insert(0, server_root_routes.routes[0])  # PROPFIND on / before other routes
+app.mount("/caldav", caldav_router)
 
 
 # Serve React SPA — static assets first, then fallback to index.html

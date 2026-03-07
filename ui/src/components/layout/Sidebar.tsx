@@ -66,6 +66,24 @@ export default function Sidebar() {
             {label}
           </NavLink>
         ))}
+        {isAdmin && (
+          <>
+            <div className="border-t border-border my-2" />
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                  isActive
+                    ? 'bg-accent/15 text-accent font-medium'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                }`
+              }
+            >
+              <span className="text-base">⚙</span>
+              Settings
+            </NavLink>
+          </>
+        )}
       </nav>
       {user && (
         <div className="p-3 border-t border-border">
