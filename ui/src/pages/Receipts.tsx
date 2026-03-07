@@ -9,7 +9,7 @@ import {
   useCandidates,
 } from '../hooks/useReceipts'
 import { receiptFileUrl, receiptThumbnailUrl } from '../api/receipts'
-import type { ReceiptItem, ReceiptCandidate } from '../api/receipts'
+import type { ReceiptCandidate } from '../api/receipts'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import CurrencyAmount from '../components/common/CurrencyAmount'
 import Lightbox from '../components/common/Lightbox'
