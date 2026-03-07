@@ -104,8 +104,26 @@ def auto_match_receipt(conn, receipt_id: UUID) -> dict | None:
 
     candidates = cur.fetchall()
 
+    if not candidates:
+        cur.execute("""
+            UPDATE receipt
+            SET match_status = 'pending_match', updated_at = now()
+            WHERE id = %s
+        """, (str(receipt_id),))
+        conn.commit()
+        log.info("Receipt %s: no candidates found", receipt_id)
+        return None
+
+    # If multiple candidates, prefer exact amount matches
+    if len(candidates) > 1:
+        exact = [c for c in candidates if abs(abs(float(c[2])) - amt) < 0.01]
+        if len(exact) == 1:
+            candidates = exact
+            log.info("Receipt %s: %d candidates narrowed to 1 exact amount match",
+                     receipt_id, len(candidates))
+
     if len(candidates) == 1:
-        # Unambiguous match
+        # Unambiguous match (or narrowed to one exact match)
         cand = candidates[0]
         cand_id, cand_date, cand_amount = cand[0], cand[1], cand[2]
 
@@ -146,7 +164,7 @@ def auto_match_receipt(conn, receipt_id: UUID) -> dict | None:
             "confidence": str(confidence),
         }
 
-    # 0 or 2+ candidates — leave for manual resolution
+    # 2+ candidates with no clear winner — leave for manual resolution
     cur.execute("""
         UPDATE receipt
         SET match_status = 'pending_match', updated_at = now()

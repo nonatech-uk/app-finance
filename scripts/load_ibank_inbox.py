@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Load missing iBank transactions from the 00 Inbox backup.
+"""Load iBank transactions from NonaFinance.bank8.
 
-The Inbox backup (early 2024 restore) has a "Gold Card" account with ~4,590
-transactions missing from the existing iBank-Mac.bank8 database, covering
-2017-2023. Also has ~217 Sole Account transactions (mostly transfer legs).
+NonaFinance.bank8 is a separate Bankivity database with First Direct
+transactions (sole account 5682 + credit card 8897).
 
-Uses the same approach as load_ibank_transactions.py but pointed at the
-Inbox backup, with account name differences handled.
+Uses the same approach as load_ibank_transactions.py.
 
 Usage:
     python scripts/load_ibank_inbox.py --dry-run
@@ -29,49 +27,14 @@ import sqlite3
 
 from config.settings import settings
 
-IBANK_PATH = "/Users/stu/Documents/00 Inbox/iBank-Current.bank8/StoreContent/core.sql"
+IBANK_PATH = "/Users/stu/Documents/01 Filing/01 Finance/11 iBank/NonaFinance.bank8/StoreContent/core.sql"
 COREDATA_EPOCH = datetime(2001, 1, 1)
 
-# Account map for the Inbox backup — differences from main DB:
-#   "Gold Card" instead of "Credit Card"
-#   "TransferWise (X)" instead of "Wise (X)"
+# Account map for NonaFinance.bank8
+# Account names differ from iBank-Mac: sort code+number and masked card number
 ACCOUNT_MAP = {
-    "Sole Account (5682)":                  ("first_direct", "fd_5682"),
-    "Gold Card":                            ("first_direct", "fd_8897"),
-    "Monzo":                                ("monzo", "monzo_current"),
-    "TransferWise (CHF)":                   ("wise", "wise_CHF"),
-    "TransferWise (EUR)":                   ("wise", "wise_EUR"),
-    "TransferWise (USD)":                   ("wise", "wise_USD"),
-    "TransferWise (GBP)":                   ("wise", "wise_GBP"),
-    "zz - VS Account (1517)":              ("first_direct", "fd_1517"),
-    "Cash ISA (0489)":                      ("first_direct", "fd_0489"),
-    "Cash ISA (1814)":                      ("first_direct", "fd_1814"),
-    "e-Savings Account (2439)":             ("first_direct", "fd_2439"),
-    "Bonus Savings (3883)":                 ("first_direct", "fd_3883"),
-    "Regular Saver (4795)":                 ("first_direct", "fd_4795"),
-    "Offset Mortgage (9088)":               ("first_direct", "fd_9088"),
-    "Marcus (Goldman sachs - UK)":          ("goldman_sachs", "marcus"),
-    "Citi Savings (US)":                    ("citi", "citi_savings"),
-    "Citi Pension":                         ("citi", "citi_pension"),
-    "Fund & Share Account":                 ("hl", "hl_fund_share"),
-    "AEGON ISA":                            ("aegon", "aegon_isa"),
-    "AEGON Savings":                        ("aegon", "aegon_savings"),
-    "Mees Pot":                             ("monzo", "monzo_mees_pot"),
-    "Fidelity GS":                          ("fidelity", "fidelity_gs"),
-    "DB Pension (Standard Life)":           ("standard_life", "db_pension"),
-    "Dresdner Pension (Standard Life)":     ("standard_life", "dresdner_pension"),
-    "Goldman Sachs Pension":                ("goldman_sachs", "gs_pension"),
-    "Merrill Pension":                      ("fidelity", "merrill_pension"),
-    "BT Pension":                           ("standard_life", "bt_pension"),
-    "Swiss Bank Pension":                   ("swiss_bank", "swiss_pension"),
-    "National Savings (Premium Bonds) Savings": ("ns_and_i", "premium_bonds"),
-    "Computershare (Citi)":                 ("computershare", "computershare_citi"),
-    "Middle Farm":                          ("property", "middle_farm"),
-    "Vincent Square":                       ("property", "vincent_square"),
-    "The Beast":                            ("vehicle", "the_beast"),
-    "Hanielle Loan":                        ("other", "hanielle_loan"),
-    "Lehman Pension (Fidelity)":            ("fidelity", "lehman_pension"),
-    "Credit Suisse Pension  (Fidelity)":    ("fidelity", "cs_pension"),
+    "40478790245682":                       ("first_direct", "fd_5682"),
+    "XXXX XXXX XXXX 8897":                  ("first_direct", "fd_8897"),
 }
 
 
@@ -199,7 +162,7 @@ def extract_transactions(ibank_conn) -> List[dict]:
                 "ibank_account": acct_name,
                 "ibank_category": ibank_category,
                 "ibank_is_transfer": is_transfer,
-                "ibank_source_db": "iBank-Current.bank8",
+                "ibank_source_db": "NonaFinance.bank8",
             }
 
             if is_transfer:
@@ -292,7 +255,11 @@ def main():
         print(f"    {inst}/{ref}: {count}")
 
     with_cat = sum(1 for t in txns if t["ibank_category"])
-    print(f"\n  With category: {with_cat} ({100*with_cat/len(txns):.0f}%)")
+    if txns:
+        print(f"\n  With category: {with_cat} ({100*with_cat/len(txns):.0f}%)")
+    else:
+        print("\n  No transactions found.")
+        return
 
     if args.dry_run:
         print("\n  [DRY RUN] No data written.")

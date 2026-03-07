@@ -1563,6 +1563,38 @@ function NoteSection({ transactionId, note, noteSource }: { transactionId: strin
   )
 }
 
+function TextReceiptInline({ receiptId, filename }: { receiptId: string; filename: string }) {
+  const [text, setText] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    fetch(receiptFileUrl(receiptId))
+      .then(r => r.text())
+      .then(setText)
+      .catch(() => setText(null))
+  }, [receiptId])
+
+  if (!text) return null
+
+  return (
+    <div className="rounded border border-border overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-2 py-1 text-xs text-left bg-bg-hover text-text-secondary hover:text-text-primary flex items-center gap-1"
+      >
+        <span>📝</span>
+        <span className="truncate">{filename}</span>
+        <span className="ml-auto">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && (
+        <pre className="p-2 text-xs whitespace-pre-wrap overflow-auto max-h-[300px] text-text-primary bg-bg-primary">
+          {text}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 function ReceiptSection({ transactionId }: { transactionId: string }) {
   const { data, isLoading } = useTransactionReceipts(transactionId)
   const uploadMut = useUploadReceipt()
@@ -1585,34 +1617,36 @@ function ReceiptSection({ transactionId }: { transactionId: string }) {
       {isLoading ? (
         <div className="text-xs text-text-secondary">Loading...</div>
       ) : items.length > 0 ? (
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="space-y-2 mb-2">
           {items.map(r => (
-            <div
-              key={r.id}
-              className="cursor-pointer rounded border border-border hover:border-accent/50 overflow-hidden"
-              onClick={() => setLightboxSrc({
-                src: receiptFileUrl(r.id),
-                mime: r.mime_type,
-                title: r.original_filename,
-              })}
-              title={r.original_filename}
-            >
-              {r.mime_type.startsWith('image/') ? (
-                <img
-                  src={receiptThumbnailUrl(r.id)}
-                  alt={r.original_filename}
-                  className="w-16 h-16 object-cover"
-                  onError={e => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                    ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="flex items-center justify-center w-16 h-16 text-2xl">📷</span>'
-                  }}
-                />
-              ) : (
-                <span className="flex items-center justify-center w-16 h-16 text-2xl">
-                  {r.mime_type === 'application/pdf' ? '📄' : '📝'}
-                </span>
-              )}
-            </div>
+            r.mime_type === 'text/plain' ? (
+              <TextReceiptInline key={r.id} receiptId={r.id} filename={r.original_filename} />
+            ) : (
+              <div
+                key={r.id}
+                className="cursor-pointer rounded border border-border hover:border-accent/50 overflow-hidden inline-block mr-2"
+                onClick={() => setLightboxSrc({
+                  src: receiptFileUrl(r.id),
+                  mime: r.mime_type,
+                  title: r.original_filename,
+                })}
+                title={r.original_filename}
+              >
+                {r.mime_type.startsWith('image/') ? (
+                  <img
+                    src={receiptThumbnailUrl(r.id)}
+                    alt={r.original_filename}
+                    className="w-16 h-16 object-cover"
+                    onError={e => {
+                      (e.target as HTMLImageElement).style.display = 'none'
+                      ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="flex items-center justify-center w-16 h-16 text-2xl">📷</span>'
+                    }}
+                  />
+                ) : (
+                  <span className="flex items-center justify-center w-16 h-16 text-2xl">📄</span>
+                )}
+              </div>
+            )
           ))}
         </div>
       ) : (

@@ -50,9 +50,9 @@ def find_superseded_transactions(
     for row in cur.fetchall():
         alias_refs.append(row[0])
 
-    # Find the earliest date of any other source for this account
+    # Find the date range covered by other (superseding) sources for this account
     cur.execute("""
-        SELECT MIN(posted_at)
+        SELECT MIN(posted_at), MAX(posted_at)
         FROM raw_transaction
         WHERE institution = %(inst)s
           AND account_ref = ANY(%(refs)s)
@@ -64,6 +64,7 @@ def find_superseded_transactions(
     })
     row = cur.fetchone()
     coverage_start = row[0] if row and row[0] else None
+    coverage_end = row[1] if row and row[1] else None
 
     if coverage_start is None:
         # No other source exists — nothing to suppress against
@@ -76,6 +77,7 @@ def find_superseded_transactions(
           AND rt.account_ref = %(acct)s
           AND rt.source = %(src)s
           AND rt.posted_at >= %(coverage_start)s
+          AND rt.posted_at <= %(coverage_end)s
           AND NOT EXISTS (
               SELECT 1 FROM dedup_group_member dgm
               WHERE dgm.raw_transaction_id = rt.id
@@ -87,6 +89,7 @@ def find_superseded_transactions(
         "acct": account_ref,
         "src": superseded_source,
         "coverage_start": coverage_start,
+        "coverage_end": coverage_end,
     })
     return [row[0] for row in cur.fetchall()]
 

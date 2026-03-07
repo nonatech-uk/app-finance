@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   useReceipts,
   useReceipt,
@@ -299,6 +299,30 @@ export default function Receipts() {
   )
 }
 
+// ── Text Receipt Preview ────────────────────────────────────────────────────
+
+function TextReceiptPreview({ receiptId }: { receiptId: string }) {
+  const [text, setText] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(receiptFileUrl(receiptId))
+      .then(r => r.text())
+      .then(t => { setText(t); setLoading(false) })
+      .catch(() => { setText(null); setLoading(false) })
+  }, [receiptId])
+
+  if (loading) return <div className="p-3 text-xs text-text-secondary">Loading...</div>
+  if (!text) return <div className="p-3 text-xs text-text-secondary">Could not load text</div>
+
+  return (
+    <pre className="p-3 text-xs whitespace-pre-wrap overflow-auto max-h-[400px] text-text-primary">
+      {text}
+    </pre>
+  )
+}
+
 // ── Detail Panel ────────────────────────────────────────────────────────────
 
 interface DetailPanelProps {
@@ -342,18 +366,27 @@ function ReceiptDetailPanel({
 
       {/* Preview */}
       <div
-        className="mb-4 cursor-pointer rounded overflow-hidden bg-bg-hover flex items-center justify-center"
-        onClick={onOpenLightbox}
+        className="mb-4 rounded overflow-hidden bg-bg-hover"
         style={{ minHeight: '200px' }}
       >
         {detail.mime_type.startsWith('image/') ? (
-          <img
-            src={receiptFileUrl(detail.id)}
-            alt={detail.original_filename}
-            className="max-w-full max-h-[300px] object-contain"
-          />
+          <div
+            className="cursor-pointer flex items-center justify-center"
+            onClick={onOpenLightbox}
+          >
+            <img
+              src={receiptFileUrl(detail.id)}
+              alt={detail.original_filename}
+              className="max-w-full max-h-[300px] object-contain"
+            />
+          </div>
+        ) : detail.mime_type === 'text/plain' ? (
+          <TextReceiptPreview receiptId={detail.id} />
         ) : (
-          <div className="text-4xl py-8">
+          <div
+            className="cursor-pointer flex items-center justify-center text-4xl py-8"
+            onClick={onOpenLightbox}
+          >
             {detail.mime_type === 'application/pdf' ? '📄' : '📝'}
             <div className="text-sm text-text-secondary mt-2">Click to view</div>
           </div>
