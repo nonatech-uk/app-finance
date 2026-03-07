@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Anthropic (for LLM categorisation)
     anthropic_api_key: str = ""
 
+    # Receipts
+    receipt_storage_path: str = "./receipts"
+
     # Auth
     auth_enabled: bool = True
     dev_user_email: str = "stu@mees.st"

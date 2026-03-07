@@ -10,6 +10,9 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import JsonViewer from '../components/common/JsonViewer'
 import type { TransactionItem, TransactionDetail, CategoryItem, TagItem } from '../api/types'
 import type { SplitLineInput } from '../api/transactions'
+import { useTransactionReceipts, useUploadReceipt } from '../hooks/useReceipts'
+import { receiptFileUrl, receiptThumbnailUrl } from '../api/receipts'
+import Lightbox from '../components/common/Lightbox'
 
 function SortableHeader({
   label, sortKey, currentSort, currentDir, onSort, align = 'left',
@@ -440,6 +443,9 @@ export function TransactionDetailContent({ detail }: { detail: import('../api/ty
 
       {/* Tags */}
       <TagSection transactionId={detail.id} tags={detail.tags} />
+
+      {/* Receipts */}
+      <ReceiptSection transactionId={detail.id} />
 
       {/* Dedup group */}
       {detail.dedup_group && (
@@ -1552,6 +1558,90 @@ function NoteSection({ transactionId, note, noteSource }: { transactionId: strin
         <div className="text-text-primary whitespace-pre-wrap">{note}</div>
       ) : (
         <div className="text-text-secondary text-xs italic">No note</div>
+      )}
+    </section>
+  )
+}
+
+function ReceiptSection({ transactionId }: { transactionId: string }) {
+  const { data, isLoading } = useTransactionReceipts(transactionId)
+  const uploadMut = useUploadReceipt()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [lightboxSrc, setLightboxSrc] = useState<{ src: string; mime: string; title: string } | null>(null)
+
+  const handleUpload = (files: FileList | null) => {
+    if (!files) return
+    Array.from(files).forEach(file => {
+      uploadMut.mutate({ file })
+    })
+  }
+
+  const items = data?.items ?? []
+
+  return (
+    <section>
+      <h4 className="text-xs uppercase text-text-secondary mb-2">Receipts</h4>
+
+      {isLoading ? (
+        <div className="text-xs text-text-secondary">Loading...</div>
+      ) : items.length > 0 ? (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {items.map(r => (
+            <div
+              key={r.id}
+              className="cursor-pointer rounded border border-border hover:border-accent/50 overflow-hidden"
+              onClick={() => setLightboxSrc({
+                src: receiptFileUrl(r.id),
+                mime: r.mime_type,
+                title: r.original_filename,
+              })}
+              title={r.original_filename}
+            >
+              {r.mime_type.startsWith('image/') ? (
+                <img
+                  src={receiptThumbnailUrl(r.id)}
+                  alt={r.original_filename}
+                  className="w-16 h-16 object-cover"
+                  onError={e => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="flex items-center justify-center w-16 h-16 text-2xl">📷</span>'
+                  }}
+                />
+              ) : (
+                <span className="flex items-center justify-center w-16 h-16 text-2xl">
+                  {r.mime_type === 'application/pdf' ? '📄' : '📝'}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-text-secondary text-xs italic mb-2">No receipts attached</div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain"
+        className="hidden"
+        onChange={e => handleUpload(e.target.files)}
+      />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMut.isPending}
+        className="text-xs text-accent hover:underline disabled:opacity-50"
+      >
+        {uploadMut.isPending ? 'Uploading...' : '+ Attach Receipt'}
+      </button>
+
+      {lightboxSrc && (
+        <Lightbox
+          src={lightboxSrc.src}
+          mimeType={lightboxSrc.mime}
+          title={lightboxSrc.title}
+          onClose={() => setLightboxSrc(null)}
+        />
       )}
     </section>
   )

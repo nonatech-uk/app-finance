@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config.settings import settings
 from src.api.deps import close_pool, init_pool
-from src.api.routers import accounts, assets, auth, cash, categories, imports, merchants, stats, stocks, tag_rules, transactions
+from src.api.routers import accounts, assets, auth, cash, categories, imports, merchants, receipts, stats, stocks, tag_rules, transactions
 from src.api.routers import settings as settings_router
 
 STATIC_DIR = Path(_project_root) / "static"
@@ -59,6 +59,7 @@ app.include_router(assets.router, prefix="/api/v1", tags=["assets"])
 app.include_router(tag_rules.router, prefix="/api/v1", tags=["tag-rules"])
 app.include_router(settings_router.router, prefix="/api/v1", tags=["settings"])
 app.include_router(cash.router, prefix="/api/v1", tags=["cash"])
+app.include_router(receipts.router, prefix="/api/v1", tags=["receipts"])
 
 
 @app.get("/health")

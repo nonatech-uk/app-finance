@@ -12,6 +12,14 @@ export default function Settings() {
   const [passwordDirty, setPasswordDirty] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Receipt settings
+  const [receiptAlertDays, setReceiptAlertDays] = useState(7)
+  const [receiptDateTolerance, setReceiptDateTolerance] = useState(2)
+  const [receiptAutoMatch, setReceiptAutoMatch] = useState(true)
+  const [receiptAmountTolerancePct, setReceiptAmountTolerancePct] = useState(20)
+  const [anthropicKey, setAnthropicKey] = useState('')
+  const [anthropicKeyDirty, setAnthropicKeyDirty] = useState(false)
+
   // Sync form state when data loads
   useEffect(() => {
     if (data) {
@@ -19,6 +27,12 @@ export default function Settings() {
       setCaldavTag(data.caldav_tag)
       setCaldavPassword('')
       setPasswordDirty(false)
+      setReceiptAlertDays(data.receipt_alert_days)
+      setReceiptDateTolerance(data.receipt_match_date_tolerance)
+      setReceiptAutoMatch(data.receipt_auto_match_enabled)
+      setReceiptAmountTolerancePct(data.receipt_amount_tolerance_pct)
+      setAnthropicKey('')
+      setAnthropicKeyDirty(false)
     }
   }, [data])
 
@@ -42,16 +56,159 @@ export default function Settings() {
     })
   }
 
+  const handleReceiptSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    const body: Record<string, unknown> = {
+      receipt_alert_days: receiptAlertDays,
+      receipt_match_date_tolerance: receiptDateTolerance,
+      receipt_auto_match_enabled: receiptAutoMatch,
+      receipt_amount_tolerance_pct: receiptAmountTolerancePct,
+    }
+    if (anthropicKeyDirty) {
+      body.anthropic_api_key = anthropicKey
+    }
+    updateSettings.mutate(body, {
+      onSuccess: () => {
+        setSaved(true)
+        setAnthropicKeyDirty(false)
+        setTimeout(() => setSaved(false), 2000)
+      },
+    })
+  }
+
   const serverUrl = `${window.location.origin}/caldav/`
 
-  // Password will be set after save if: already set on server, or user has typed a non-empty value
   const willHavePassword = passwordDirty ? caldavPassword.length > 0 : !!data?.caldav_password_set
-  // Can't enable without a password
   const canEnable = willHavePassword
 
   return (
     <div className="space-y-6 max-w-2xl">
       <h2 className="text-xl font-semibold text-text-primary">Settings</h2>
+
+      {/* Receipt Management */}
+      <div className="bg-bg-card border border-border rounded-lg p-5 space-y-5">
+        <div>
+          <h3 className="text-base font-medium text-text-primary">Receipt Management</h3>
+          <p className="text-sm text-text-secondary mt-1">
+            OCR, auto-matching, and alert settings for uploaded receipts.
+          </p>
+        </div>
+
+        <form onSubmit={handleReceiptSave} className="space-y-4">
+          {/* Anthropic API Key */}
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Anthropic API Key (for OCR)</label>
+            <input
+              type="password"
+              value={anthropicKeyDirty ? anthropicKey : (data?.anthropic_api_key_set ? '••••••••••••••••' : '')}
+              onChange={e => {
+                setAnthropicKey(e.target.value)
+                setAnthropicKeyDirty(true)
+              }}
+              onFocus={() => {
+                if (!anthropicKeyDirty) {
+                  setAnthropicKey('')
+                  setAnthropicKeyDirty(true)
+                }
+              }}
+              placeholder={data?.anthropic_api_key_set ? 'Key is set' : 'sk-ant-...'}
+              className="w-full px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono"
+            />
+            <p className="text-xs text-text-secondary mt-1">
+              {data?.anthropic_api_key_set
+                ? 'API key is configured. Enter a new value to change it.'
+                : 'Required for receipt OCR. Get a key from console.anthropic.com.'}
+            </p>
+          </div>
+
+          {/* Auto-match toggle */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={receiptAutoMatch}
+              onClick={() => setReceiptAutoMatch(!receiptAutoMatch)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                receiptAutoMatch ? 'bg-accent' : 'bg-bg-hover'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${
+                  receiptAutoMatch ? 'translate-x-[22px]' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-sm text-text-primary">Auto-match receipts to transactions</span>
+          </label>
+
+          {/* Date tolerance */}
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Date tolerance (days)</label>
+            <input
+              type="number"
+              min={0}
+              max={14}
+              value={receiptDateTolerance}
+              onChange={e => setReceiptDateTolerance(parseInt(e.target.value) || 0)}
+              className="w-24 px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-secondary mt-1">
+              How many days either side of the receipt date to search for matching transactions.
+            </p>
+          </div>
+
+          {/* Amount tolerance */}
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Amount tolerance (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={receiptAmountTolerancePct}
+              onChange={e => setReceiptAmountTolerancePct(parseInt(e.target.value) || 0)}
+              className="w-24 px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-secondary mt-1">
+              Allow matching when amounts differ by up to this percentage (e.g. tips). 0 = exact match only.
+            </p>
+          </div>
+
+          {/* Alert days */}
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Alert after (days unmatched)</label>
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={receiptAlertDays}
+              onChange={e => setReceiptAlertDays(parseInt(e.target.value) || 7)}
+              className="w-24 px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-secondary mt-1">
+              Create a CalDAV alert if a receipt remains unmatched for this many days.
+            </p>
+          </div>
+
+          {/* Save */}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={updateSettings.isPending}
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {updateSettings.isPending ? 'Saving...' : 'Save'}
+            </button>
+            {saved && (
+              <span className="text-sm text-green-400">Saved ✓</span>
+            )}
+            {updateSettings.isError && (
+              <span className="text-sm text-red-400">
+                Error: {updateSettings.error?.message || 'Failed to save'}
+              </span>
+            )}
+          </div>
+        </form>
+      </div>
 
       {/* CalDAV Task Feed */}
       <div className="bg-bg-card border border-border rounded-lg p-5 space-y-5">
@@ -113,7 +270,6 @@ export default function Settings() {
               onChange={e => {
                 setCaldavPassword(e.target.value)
                 setPasswordDirty(true)
-                // If clearing password, auto-disable the feed
                 if (!e.target.value && caldavEnabled) {
                   setCaldavEnabled(false)
                 }
@@ -141,7 +297,7 @@ export default function Settings() {
               disabled={updateSettings.isPending}
               className="px-4 py-1.5 text-sm font-medium rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
             >
-              {updateSettings.isPending ? 'Saving…' : 'Save'}
+              {updateSettings.isPending ? 'Saving...' : 'Save'}
             </button>
             {saved && (
               <span className="text-sm text-green-400">Saved ✓</span>

@@ -518,10 +518,20 @@ export interface SettingsResponse {
   caldav_enabled: boolean
   caldav_tag: string
   caldav_password_set: boolean
+  receipt_alert_days: number
+  receipt_match_date_tolerance: number
+  receipt_auto_match_enabled: boolean
+  receipt_amount_tolerance_pct: number
+  anthropic_api_key_set: boolean
 }
 
 export interface SettingsUpdate {
   caldav_enabled?: boolean
   caldav_tag?: string
   caldav_password?: string
+  receipt_alert_days?: number
+  receipt_match_date_tolerance?: number
+  receipt_auto_match_enabled?: boolean
+  receipt_amount_tolerance_pct?: number
+  anthropic_api_key?: string
 }

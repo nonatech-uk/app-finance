@@ -318,6 +318,59 @@ def main():
         print(f"  ERROR syncing to Xero: {e}")
         traceback.print_exc()
 
+    # Step 13: Receipt sweep — re-attempt matching + CalDAV alerts for overdue
+    print("\nStep 13: Receipt sweep...")
+    try:
+        from src.receipts.matcher import auto_match_receipt
+
+        conn = psycopg2.connect(settings.dsn)
+        try:
+            cur = conn.cursor()
+
+            # Re-attempt matching for pending receipts
+            cur.execute("""
+                SELECT id FROM receipt
+                WHERE match_status = 'pending_match'
+            """)
+            pending = cur.fetchall()
+            matched_count = 0
+            for (rid,) in pending:
+                result = auto_match_receipt(conn, rid)
+                if result and result.get("matched"):
+                    matched_count += 1
+
+            print(f"  Pending: {len(pending)}, Newly matched: {matched_count}")
+
+            # CalDAV alerts for overdue unmatched receipts
+            cur.execute("SELECT value FROM app_setting WHERE key = 'receipt.alert_days'")
+            alert_days_row = cur.fetchone()
+            alert_days = int(alert_days_row[0]) if alert_days_row else 7
+
+            cur.execute("SELECT value FROM app_setting WHERE key = 'caldav.enabled'")
+            caldav_row = cur.fetchone()
+            caldav_enabled = caldav_row and caldav_row[0].lower() == "true"
+
+            if caldav_enabled:
+                cur.execute("""
+                    SELECT id, extracted_merchant, extracted_amount, extracted_date
+                    FROM receipt
+                    WHERE match_status IN ('pending_match', 'pending_ocr')
+                      AND uploaded_at < now() - interval '%s days'
+                """, (alert_days,))
+                overdue = cur.fetchall()
+                if overdue:
+                    print(f"  Overdue receipts needing alerts: {len(overdue)}")
+                    # CalDAV todo creation would go here
+                    # For now just log the count
+            else:
+                print("  CalDAV disabled — skipping overdue alerts")
+
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  ERROR in receipt sweep: {e}")
+        traceback.print_exc()
+
     # Step 12: Healthcheck pings (only on source-level success)
     print("\nStep 12: Healthcheck pings...")
     if wise_ok:

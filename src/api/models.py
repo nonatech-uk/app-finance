@@ -752,12 +752,78 @@ class SettingsResponse(BaseModel):
     caldav_enabled: bool
     caldav_tag: str
     caldav_password_set: bool  # never expose actual password
+    # Receipt settings
+    receipt_alert_days: int = 7
+    receipt_match_date_tolerance: int = 2
+    receipt_auto_match_enabled: bool = True
+    receipt_amount_tolerance_pct: int = 20
+    anthropic_api_key_set: bool = False
 
 
 class SettingsUpdate(BaseModel):
     caldav_enabled: bool | None = None
     caldav_tag: str | None = None
     caldav_password: str | None = None  # empty string = disable auth
+    # Receipt settings
+    receipt_alert_days: int | None = None
+    receipt_match_date_tolerance: int | None = None
+    receipt_auto_match_enabled: bool | None = None
+    receipt_amount_tolerance_pct: int | None = None
+    anthropic_api_key: str | None = None  # stored in .env, not DB
+
+
+# ── Receipts ────────────────────────────────────────────────────────────────
+
+
+class ReceiptItem(BaseModel):
+    id: UUID
+    original_filename: str
+    mime_type: str
+    file_size: int
+
+    ocr_status: str
+    extracted_date: date | None = None
+    extracted_amount: Decimal | None = None
+    extracted_currency: str | None = None
+    extracted_merchant: str | None = None
+
+    match_status: str
+    matched_transaction_id: UUID | None = None
+    match_confidence: Decimal | None = None
+    matched_at: datetime | None = None
+    matched_by: str | None = None
+
+    source: str
+    uploaded_at: datetime
+    uploaded_by: str | None = None
+    notes: str | None = None
+
+
+class ReceiptDetail(ReceiptItem):
+    ocr_text: str | None = None
+    ocr_data: dict | None = None
+    file_path: str | None = None
+    thumbnail_path: str | None = None
+    matched_transaction: dict | None = None  # summary of linked txn
+
+
+class ReceiptList(BaseModel):
+    items: list[ReceiptItem]
+    total: int = 0
+
+
+class ReceiptMatchRequest(BaseModel):
+    transaction_id: UUID
+
+
+class ReceiptCandidate(BaseModel):
+    id: UUID
+    posted_at: date
+    amount: Decimal
+    currency: str | None = None
+    raw_merchant: str | None = None
+    institution: str
+    account_ref: str
 
 
 # ── Cash Accounts ───────────────────────────────────────────────────────────

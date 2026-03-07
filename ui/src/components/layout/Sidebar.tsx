@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/merchants', label: 'Merchants', icon: '⊡' },
   { to: '/tags', label: 'Tags', icon: '⊷' },
   { to: '/tag-rules', label: 'Tag Rules', icon: '⊟' },
+  { to: '/receipts', label: 'Receipts', icon: '⊘' },
 ]
 
 const SCOPE_OPTIONS = [

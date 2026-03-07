@@ -6,3 +6,6 @@ rapidfuzz
 fastapi
 python-multipart
 uvicorn[standard]
+anthropic
+Pillow
+pdf2image
