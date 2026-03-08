@@ -156,7 +156,7 @@ export default function Receipts() {
               : 'Drop receipt files here or click to upload'}
           </div>
           <div className="text-text-secondary text-xs mt-1">
-            JPEG, PNG, WebP, GIF, PDF, or TXT
+            JPEG, PNG, WebP, GIF, HEIC, PDF, or TXT
           </div>
           {uploadMut.isError && (
             <div className="text-expense text-sm mt-2">
@@ -412,7 +412,7 @@ function ReceiptDetailPanel({
             onClick={onOpenLightbox}
           >
             <img
-              src={receiptFileUrl(detail.id)}
+              src={detail.thumbnail_path ? receiptThumbnailUrl(detail.id) : receiptFileUrl(detail.id)}
               alt={detail.original_filename}
               className="max-w-full max-h-[300px] object-contain"
             />

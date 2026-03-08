@@ -8,4 +8,5 @@ python-multipart
 uvicorn[standard]
 anthropic
 Pillow
+pillow-heif
 pdf2image

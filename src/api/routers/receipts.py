@@ -31,6 +31,8 @@ ALLOWED_MIME_TYPES = {
     "image/png",
     "image/webp",
     "image/gif",
+    "image/heic",
+    "image/heif",
     "application/pdf",
     "text/plain",
 }
@@ -41,6 +43,8 @@ EXT_MAP = {
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/heic": ".jpg",   # converted to JPEG on upload
+    "image/heif": ".jpg",   # converted to JPEG on upload
     "application/pdf": ".pdf",
     "text/plain": ".txt",
 }
@@ -104,6 +108,27 @@ def _process_receipt_from_bytes(
     """, (filename, mime_type, file_size, "pending", source, uploaded_by, note))
     receipt_id = cur.fetchone()[0]
 
+    # Convert HEIC/HEIF to JPEG
+    if mime_type in ("image/heic", "image/heif"):
+        try:
+            import io
+            from pillow_heif import register_heif_opener
+            from PIL import Image, ImageOps
+            register_heif_opener()
+            with Image.open(io.BytesIO(file_bytes)) as img:
+                img = ImageOps.exif_transpose(img)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, "JPEG", quality=90)
+                file_bytes = buf.getvalue()
+            mime_type = "image/jpeg"
+            ext = ".jpg"
+            file_size = len(file_bytes)
+        except Exception as e:
+            log.exception("HEIC conversion failed for %s", filename)
+            raise HTTPException(400, f"Failed to convert HEIC image: {e}")
+
     # Save file to disk
     year_month = date.today().strftime("%Y/%m")
     rel_path = f"{year_month}/{receipt_id}{ext}"
@@ -118,8 +143,9 @@ def _process_receipt_from_bytes(
         thumb_rel = f"{year_month}/{receipt_id}_thumb.jpg"
 
     cur.execute("""
-        UPDATE receipt SET file_path = %s, thumbnail_path = %s WHERE id = %s
-    """, (rel_path, thumb_rel, str(receipt_id)))
+        UPDATE receipt SET file_path = %s, thumbnail_path = %s,
+               mime_type = %s, file_size = %s WHERE id = %s
+    """, (rel_path, thumb_rel, mime_type, file_size, str(receipt_id)))
     conn.commit()
 
     # Run OCR
