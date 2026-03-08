@@ -224,16 +224,7 @@ def find_match_candidates(conn, receipt_id: UUID, limit: int = 20) -> list[dict]
 
     where = " AND ".join(conditions)
 
-    # Order by amount closeness first, then date proximity
-    order_parts = []
-    if extracted_amount:
-        order_parts.append("ABS(ABS(at.amount) - %s)")
-        params.append(str(extracted_amount))
-    if extracted_date:
-        order_parts.append("ABS(at.posted_at - %s::date)")
-        params.append(extracted_date)
-
-    order = ", ".join(order_parts) if order_parts else "at.posted_at DESC"
+    order = "at.posted_at DESC"
 
     cur.execute(f"""
         SELECT at.id, at.posted_at, at.amount, at.currency,

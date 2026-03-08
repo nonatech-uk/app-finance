@@ -8,6 +8,7 @@ import {
   deleteReceipt,
   fetchCandidates,
   fetchTransactionReceipts,
+  updateReceipt,
 } from '../api/receipts'
 
 export function useReceipts(status: string = 'all', limit: number = 50, offset: number = 0) {
@@ -65,6 +66,25 @@ export function useDeleteReceipt() {
     mutationFn: (receiptId: string) => deleteReceipt(receiptId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] })
+    },
+  })
+}
+
+export function useUpdateReceipt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ receiptId, data }: {
+      receiptId: string
+      data: {
+        extracted_date?: string | null
+        extracted_amount?: number | null
+        extracted_currency?: string | null
+        extracted_merchant?: string | null
+      }
+    }) => updateReceipt(receiptId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['receipt'] })
     },
   })
 }

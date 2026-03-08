@@ -820,6 +820,13 @@ class ReceiptList(BaseModel):
     total: int = 0
 
 
+class ReceiptUpdate(BaseModel):
+    extracted_date: date | None = None
+    extracted_amount: Decimal | None = None
+    extracted_currency: str | None = None
+    extracted_merchant: str | None = None
+
+
 class ReceiptMatchRequest(BaseModel):
     transaction_id: UUID
 

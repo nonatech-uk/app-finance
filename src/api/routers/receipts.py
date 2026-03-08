@@ -20,6 +20,7 @@ from src.api.models import (
     ReceiptItem,
     ReceiptList,
     ReceiptMatchRequest,
+    ReceiptUpdate,
 )
 
 log = logging.getLogger(__name__)
@@ -460,6 +461,68 @@ def get_receipt(
     if not detail:
         raise HTTPException(404, "Receipt not found")
     return detail
+
+
+# ── Update OCR Fields ────────────────────────────────────────────────────────
+
+
+@router.patch("/receipts/{receipt_id}")
+def update_receipt(
+    receipt_id: UUID,
+    body: ReceiptUpdate,
+    conn=Depends(get_conn),
+    user: CurrentUser = Depends(require_admin),
+):
+    """Update OCR-extracted fields on a receipt, then re-attempt auto-match."""
+    cur = conn.cursor()
+
+    # Verify receipt exists
+    cur.execute("SELECT id FROM receipt WHERE id = %s", (str(receipt_id),))
+    if not cur.fetchone():
+        raise HTTPException(404, "Receipt not found")
+
+    # Build SET clause from provided fields only
+    provided = body.model_fields_set
+    if not provided:
+        raise HTTPException(400, "No fields to update")
+
+    set_parts = []
+    params: list = []
+    for field in ("extracted_date", "extracted_amount", "extracted_currency", "extracted_merchant"):
+        if field in provided:
+            set_parts.append(f"{field} = %s")
+            params.append(getattr(body, field))
+
+    set_parts.append("updated_at = now()")
+    params.append(str(receipt_id))
+
+    cur.execute(
+        f"UPDATE receipt SET {', '.join(set_parts)} WHERE id = %s",
+        params,
+    )
+    conn.commit()
+
+    # Re-attempt auto-match if date or amount changed
+    if {"extracted_date", "extracted_amount", "extracted_currency"} & provided:
+        try:
+            # Reset match status so auto-match can re-evaluate
+            cur.execute("""
+                UPDATE receipt
+                SET match_status = 'pending_match',
+                    matched_transaction_id = NULL,
+                    match_confidence = NULL,
+                    matched_at = NULL,
+                    matched_by = NULL
+                WHERE id = %s AND match_status NOT IN ('manually_matched')
+            """, (str(receipt_id),))
+            conn.commit()
+
+            from src.receipts.matcher import auto_match_receipt
+            auto_match_receipt(conn, receipt_id)
+        except Exception as e:
+            log.exception("Auto-match failed after OCR update for receipt %s", receipt_id)
+
+    return _load_receipt_detail(cur, receipt_id, conn)
 
 
 # ── File Serving ─────────────────────────────────────────────────────────────

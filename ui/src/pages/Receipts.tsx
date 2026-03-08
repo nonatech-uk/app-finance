@@ -7,6 +7,7 @@ import {
   useUnmatchReceipt,
   useDeleteReceipt,
   useCandidates,
+  useUpdateReceipt,
 } from '../hooks/useReceipts'
 import { receiptFileUrl, receiptThumbnailUrl } from '../api/receipts'
 import type { ReceiptCandidate } from '../api/receipts'
@@ -352,6 +353,42 @@ function ReceiptDetailPanel({
   candidatesLoading,
   matchPending,
 }: DetailPanelProps) {
+  const updateMutation = useUpdateReceipt()
+
+  const [editMerchant, setEditMerchant] = useState(detail.extracted_merchant || '')
+  const [editDate, setEditDate] = useState(detail.extracted_date || '')
+  const [editAmount, setEditAmount] = useState(detail.extracted_amount != null ? String(detail.extracted_amount) : '')
+  const [editCurrency, setEditCurrency] = useState(detail.extracted_currency || '')
+
+  // Reset form when detail changes (different receipt selected)
+  useEffect(() => {
+    setEditMerchant(detail.extracted_merchant || '')
+    setEditDate(detail.extracted_date || '')
+    setEditAmount(detail.extracted_amount != null ? String(detail.extracted_amount) : '')
+    setEditCurrency(detail.extracted_currency || '')
+  }, [detail.id])
+
+  const hasChanges =
+    editMerchant !== (detail.extracted_merchant || '') ||
+    editDate !== (detail.extracted_date || '') ||
+    editAmount !== (detail.extracted_amount != null ? String(detail.extracted_amount) : '') ||
+    editCurrency !== (detail.extracted_currency || '')
+
+  const handleSaveOcr = () => {
+    const data: Record<string, string | number | null> = {}
+    if (editMerchant !== (detail.extracted_merchant || ''))
+      data.extracted_merchant = editMerchant || null
+    if (editDate !== (detail.extracted_date || ''))
+      data.extracted_date = editDate || null
+    if (editAmount !== (detail.extracted_amount != null ? String(detail.extracted_amount) : ''))
+      data.extracted_amount = editAmount ? parseFloat(editAmount) : null
+    if (editCurrency !== (detail.extracted_currency || ''))
+      data.extracted_currency = editCurrency || null
+    updateMutation.mutate({ receiptId: detail.id, data })
+  }
+
+  const inputClass = 'w-full px-2 py-1 text-sm bg-bg-hover border border-border rounded focus:border-accent focus:outline-none'
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -401,34 +438,61 @@ function ReceiptDetailPanel({
         <span className="text-xs text-text-secondary ml-2">{formatBytes(detail.file_size)}</span>
       </div>
 
-      {/* OCR Data */}
+      {/* OCR Data — editable */}
       <div className="space-y-2 mb-4">
         <h4 className="text-sm font-medium text-text-secondary">Extracted Data</h4>
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <span className="text-text-secondary">Merchant:</span>
-            <div>{detail.extracted_merchant || '—'}</div>
+          <div className="col-span-2">
+            <label className="text-text-secondary text-xs">Merchant</label>
+            <input
+              type="text"
+              value={editMerchant}
+              onChange={e => setEditMerchant(e.target.value)}
+              placeholder="Merchant name"
+              className={inputClass}
+            />
           </div>
           <div>
-            <span className="text-text-secondary">Date:</span>
-            <div>{formatDate(detail.extracted_date)}</div>
+            <label className="text-text-secondary text-xs">Date</label>
+            <input
+              type="date"
+              value={editDate}
+              onChange={e => setEditDate(e.target.value)}
+              className={inputClass}
+            />
           </div>
           <div>
-            <span className="text-text-secondary">Amount:</span>
-            <div>
-              {detail.extracted_amount != null ? (
-                <CurrencyAmount
-                  amount={detail.extracted_amount}
-                  currency={detail.extracted_currency || ''}
-                />
-              ) : '—'}
-            </div>
+            <label className="text-text-secondary text-xs">Currency</label>
+            <input
+              type="text"
+              value={editCurrency}
+              onChange={e => setEditCurrency(e.target.value.toUpperCase())}
+              placeholder="GBP"
+              maxLength={3}
+              className={inputClass}
+            />
           </div>
-          <div>
-            <span className="text-text-secondary">Currency:</span>
-            <div>{detail.extracted_currency || '—'}</div>
+          <div className="col-span-2">
+            <label className="text-text-secondary text-xs">Amount</label>
+            <input
+              type="number"
+              step="0.01"
+              value={editAmount}
+              onChange={e => setEditAmount(e.target.value)}
+              placeholder="0.00"
+              className={inputClass}
+            />
           </div>
         </div>
+        {hasChanges && (
+          <button
+            onClick={handleSaveOcr}
+            disabled={updateMutation.isPending}
+            className="w-full px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent/80 disabled:opacity-50 transition-colors"
+          >
+            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </button>
+        )}
       </div>
 
       {/* Matched Transaction */}

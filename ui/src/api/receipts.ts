@@ -103,6 +103,18 @@ export function fetchCandidates(receiptId: string) {
   return apiFetch<{ candidates: ReceiptCandidate[] }>(`/receipts/${receiptId}/candidates`)
 }
 
+export function updateReceipt(receiptId: string, data: {
+  extracted_date?: string | null
+  extracted_amount?: number | null
+  extracted_currency?: string | null
+  extracted_merchant?: string | null
+}) {
+  return apiFetch<ReceiptDetail>(`/receipts/${receiptId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 export function fetchTransactionReceipts(transactionId: string) {
   return apiFetch<{ items: ReceiptItem[] }>(`/transactions/${transactionId}/receipts`)
 }
