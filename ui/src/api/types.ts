@@ -124,6 +124,8 @@ export interface AccountItem {
   is_archived: boolean
   exclude_from_reports: boolean
   scope: string
+  is_favourite: boolean
+  display_order: number | null
 }
 
 export interface AccountList {
@@ -135,6 +137,8 @@ export interface AccountUpdate {
   is_archived?: boolean
   exclude_from_reports?: boolean
   scope?: string
+  is_favourite?: boolean
+  display_order?: number | null
 }
 
 export interface AccountDetailResponse {

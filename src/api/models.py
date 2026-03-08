@@ -212,6 +212,8 @@ class AccountItem(BaseModel):
     is_archived: bool = False
     exclude_from_reports: bool = False
     scope: str = "personal"
+    is_favourite: bool = False
+    display_order: int | None = None
     transaction_count: int = 0
     earliest_date: date | None = None
     latest_date: date | None = None
@@ -229,6 +231,8 @@ class AccountUpdate(BaseModel):
     is_archived: bool | None = None
     exclude_from_reports: bool | None = None
     scope: str | None = None
+    is_favourite: bool | None = None
+    display_order: int | None = None
 
 
 # ── Merchants ─────────────────────────────────────────────────────────────────

@@ -1,9 +1,13 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useOverview, useMonthly } from '../hooks/useStats'
 import { useSpending } from '../hooks/useCategories'
+import { useFavouriteAccounts } from '../hooks/useAccounts'
 import { useScope } from '../contexts/ScopeContext'
 import StatCard from '../components/common/StatCard'
+import CurrencyAmount from '../components/common/CurrencyAmount'
+import Badge from '../components/common/Badge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
 function threeMonthsAgo() {
@@ -21,6 +25,7 @@ export default function Dashboard() {
   const { data: overview, isLoading: overviewLoading } = useOverview(scope)
   const { data: monthly, isLoading: monthlyLoading } = useMonthly({ months: 12, currency: 'GBP', scope })
   const { data: spending } = useSpending({ date_from: threeMonthsAgo(), date_to: today(), currency: 'GBP', scope })
+  const { data: favourites } = useFavouriteAccounts(scope)
 
   const chartData = useMemo(() => {
     if (!monthly) return []
@@ -55,6 +60,37 @@ export default function Dashboard() {
           <StatCard label="Accounts" value={overview.active_accounts} subtitle={`${overview.total_accounts} total`} />
           <StatCard label="Dedup Savings" value={overview.removed_by_dedup.toLocaleString()} subtitle={`${overview.dedup_groups} groups`} />
           <StatCard label="Category Coverage" value={`${overview.category_coverage_pct}%`} subtitle={`${overview.date_range_from} — ${overview.date_range_to}`} />
+        </div>
+      )}
+
+      {/* Favourite Accounts */}
+      {favourites && favourites.items.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-text-secondary mb-3">Favourite Accounts</h3>
+          <div className="grid grid-cols-4 gap-4">
+            {favourites.items.map(acct => (
+              <Link
+                key={`${acct.institution}-${acct.account_ref}`}
+                to={`/accounts/${acct.institution}/${acct.account_ref}`}
+                className="bg-bg-card border border-border rounded-lg p-4 hover:border-accent/50 transition-colors block"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-medium truncate">
+                    {acct.display_name || acct.name || acct.account_ref}
+                  </div>
+                  <Badge>{acct.currency}</Badge>
+                </div>
+                {acct.balance && (
+                  <div className="text-lg font-semibold">
+                    <CurrencyAmount amount={acct.balance} currency={acct.currency} showSign={false} />
+                  </div>
+                )}
+                <div className="text-text-secondary text-xs mt-1">
+                  {acct.transaction_count.toLocaleString()} transactions
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

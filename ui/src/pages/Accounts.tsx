@@ -19,6 +19,8 @@ function AccountEditModal({
   const [displayName, setDisplayName] = useState(account.display_name || '')
   const [isArchived, setIsArchived] = useState(account.is_archived)
   const [excludeFromReports, setExcludeFromReports] = useState(account.exclude_from_reports)
+  const [isFavourite, setIsFavourite] = useState(account.is_favourite)
+  const [displayOrder, setDisplayOrder] = useState(account.display_order ?? 100)
 
   const handleSave = () => {
     updateAccount.mutate(
@@ -29,6 +31,8 @@ function AccountEditModal({
           display_name: displayName || null,
           is_archived: isArchived,
           exclude_from_reports: excludeFromReports,
+          is_favourite: isFavourite,
+          display_order: isFavourite ? displayOrder : null,
         },
       },
       { onSuccess: onClose },
@@ -80,6 +84,31 @@ function AccountEditModal({
           <span>Exclude from reports</span>
           <span className="text-text-secondary text-xs">(category spending)</span>
         </label>
+
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isFavourite}
+            onChange={e => setIsFavourite(e.target.checked)}
+            className="accent-accent"
+          />
+          <span>Favourite</span>
+          <span className="text-text-secondary text-xs">(show on dashboard)</span>
+        </label>
+
+        {isFavourite && (
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Priority</label>
+            <input
+              type="number"
+              value={displayOrder}
+              onChange={e => setDisplayOrder(parseInt(e.target.value) || 100)}
+              min={1}
+              className="w-24 bg-bg-hover border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+            <span className="text-text-secondary text-xs ml-2">Lower = higher priority</span>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -472,7 +501,12 @@ export default function Accounts() {
                   className="block"
                 >
                   <div className="flex justify-between items-start mb-2 pr-14">
-                    <div className="font-medium truncate">
+                    <div className="font-medium truncate flex items-center gap-1">
+                      {acct.is_favourite && (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-amber-400 shrink-0">
+                          <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401Z" clipRule="evenodd" />
+                        </svg>
+                      )}
                       {acct.display_name || acct.name || acct.account_ref}
                     </div>
                     <Badge>{acct.currency}</Badge>

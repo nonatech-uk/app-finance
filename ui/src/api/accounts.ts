@@ -14,6 +14,11 @@ export function fetchAccountDetail(institution: string, accountRef: string, scop
   return apiFetch<AccountDetailResponse>(`/accounts/${institution}/${accountRef}${qs}`)
 }
 
+export function fetchFavouriteAccounts(scope?: string) {
+  const qs = scope ? `?scope=${scope}` : ''
+  return apiFetch<AccountList>(`/accounts/favourites${qs}`)
+}
+
 export function updateAccount(institution: string, accountRef: string, body: AccountUpdate) {
   return apiFetch<Record<string, unknown>>(`/accounts/${institution}/${accountRef}`, {
     method: 'PUT',

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchAccounts, fetchAccountDetail, updateAccount } from '../api/accounts'
+import { fetchAccounts, fetchAccountDetail, fetchFavouriteAccounts, updateAccount } from '../api/accounts'
 import type { AccountUpdate } from '../api/types'
 
 export function useAccounts(includeArchived = false, scope?: string) {
@@ -15,6 +15,14 @@ export function useAccountDetail(institution: string, accountRef: string, scope?
     queryKey: ['account', institution, accountRef, scope],
     queryFn: () => fetchAccountDetail(institution, accountRef, scope),
     enabled: !!institution && !!accountRef,
+  })
+}
+
+export function useFavouriteAccounts(scope?: string) {
+  return useQuery({
+    queryKey: ['accounts', 'favourites', scope],
+    queryFn: () => fetchFavouriteAccounts(scope),
+    staleTime: 5 * 60 * 1000,
   })
 }
 

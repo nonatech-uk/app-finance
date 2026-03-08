@@ -51,7 +51,8 @@ def list_accounts(
             a.is_active,
             a.is_archived,
             a.exclude_from_reports,
-            a.scope
+            a.scope,
+            a.display_order
         FROM active_transaction rt
         LEFT JOIN account a
             ON a.institution = rt.institution
@@ -59,8 +60,9 @@ def list_accounts(
         {where}
         GROUP BY a.id, rt.institution, rt.account_ref, rt.currency,
                  a.name, a.display_name, a.account_type, a.is_active,
-                 a.is_archived, a.exclude_from_reports, a.scope
-        ORDER BY rt.institution, rt.account_ref
+                 a.is_archived, a.exclude_from_reports, a.scope,
+                 a.display_order
+        ORDER BY a.display_order ASC NULLS LAST, rt.institution, rt.account_ref
     """, params)
 
     columns = [desc[0] for desc in cur.description]
@@ -80,6 +82,7 @@ def list_accounts(
             item["earliest_date"] = str(item["earliest_date"])
         if item["latest_date"] is not None:
             item["latest_date"] = str(item["latest_date"])
+        item["is_favourite"] = item.get("display_order") is not None
         items.append(item)
 
     # Virtual account: Other Assets (sum of latest asset valuations)
@@ -113,6 +116,71 @@ def list_accounts(
                 "exclude_from_reports": False,
                 "scope": "personal",
             })
+
+    return {"items": items}
+
+
+@router.get("/accounts/favourites")
+def list_favourite_accounts(
+    scope: str | None = Query("personal", description="Scope filter (personal/business/all)"),
+    conn=Depends(get_conn),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """List favourite accounts (display_order IS NOT NULL) with balances."""
+    cur = conn.cursor()
+
+    effective_scope = validate_scope(scope, user)
+    scope_cond, scope_params = scope_condition(effective_scope, user, alias="a")
+
+    cur.execute(f"""
+        SELECT
+            a.id AS account_id,
+            rt.institution,
+            rt.account_ref,
+            rt.currency,
+            count(*) AS transaction_count,
+            min(rt.posted_at) AS earliest_date,
+            max(rt.posted_at) AS latest_date,
+            sum(rt.amount) AS balance,
+            a.name AS account_name,
+            a.display_name,
+            a.account_type,
+            a.is_active,
+            a.is_archived,
+            a.exclude_from_reports,
+            a.scope,
+            a.display_order
+        FROM active_transaction rt
+        JOIN account a
+            ON a.institution = rt.institution
+            AND a.account_ref = rt.account_ref
+        WHERE a.display_order IS NOT NULL
+          AND (a.is_archived IS NOT TRUE)
+          AND {scope_cond}
+        GROUP BY a.id, rt.institution, rt.account_ref, rt.currency,
+                 a.name, a.display_name, a.account_type, a.is_active,
+                 a.is_archived, a.exclude_from_reports, a.scope,
+                 a.display_order
+        ORDER BY a.display_order ASC
+    """, scope_params)
+
+    columns = [desc[0] for desc in cur.description]
+    rows = cur.fetchall()
+    items = []
+    for row in rows:
+        item = dict(zip(columns, row))
+        item["id"] = item.pop("account_id", None)
+        if item["id"] is not None:
+            item["id"] = str(item["id"])
+        item["name"] = item.pop("account_name", None)
+        if item["balance"] is not None:
+            item["balance"] = str(item["balance"])
+        if item["earliest_date"] is not None:
+            item["earliest_date"] = str(item["earliest_date"])
+        if item["latest_date"] is not None:
+            item["latest_date"] = str(item["latest_date"])
+        item["is_favourite"] = True
+        items.append(item)
 
     return {"items": items}
 
@@ -227,6 +295,13 @@ def update_account(
         if body.scope not in ("personal", "business"):
             raise HTTPException(400, "scope must be 'personal' or 'business'")
         updates["scope"] = body.scope
+    if body.is_favourite is not None:
+        if body.is_favourite:
+            updates["display_order"] = body.display_order if body.display_order is not None else 100
+        else:
+            updates["display_order"] = None
+    elif body.display_order is not None:
+        updates["display_order"] = body.display_order
 
     if not updates:
         raise HTTPException(400, "No fields to update")
@@ -273,10 +348,13 @@ def update_account(
     # Return updated row
     cur.execute("""
         SELECT institution, account_ref, name, display_name, currency,
-               account_type, is_active, is_archived, exclude_from_reports, scope
+               account_type, is_active, is_archived, exclude_from_reports, scope,
+               display_order
         FROM account
         WHERE institution = %s AND account_ref = %s
     """, (institution, account_ref))
     row = cur.fetchone()
     cols = [d[0] for d in cur.description]
-    return dict(zip(cols, row))
+    result = dict(zip(cols, row))
+    result["is_favourite"] = result.get("display_order") is not None
+    return result
