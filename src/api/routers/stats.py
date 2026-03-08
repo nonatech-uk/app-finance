@@ -31,6 +31,12 @@ def monthly_totals(
         "rt.posted_at >= (CURRENT_DATE - %(months)s * INTERVAL '1 month')",
         "(a.is_archived IS NOT TRUE)",
         scope_cond,
+        # Exclude transactions categorised as +Ignore or +Transfer
+        """NOT EXISTS (
+            SELECT 1 FROM transaction_category_override tco
+            WHERE tco.raw_transaction_id = rt.id
+              AND tco.category_path LIKE '+%%'
+        )""",
     ]
     params: dict = {"currency": currency, "months": months, **scope_params}
 

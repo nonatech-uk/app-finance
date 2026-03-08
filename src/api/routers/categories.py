@@ -156,6 +156,7 @@ def spending_by_category(
             SUM(el.amount) AS total,
             COUNT(*) AS transaction_count
         FROM effective_lines el
+        WHERE COALESCE(el.category_path, 'Uncategorised') NOT LIKE '+%%'
         GROUP BY COALESCE(el.category_path, 'Uncategorised'),
                  COALESCE(el.category_name, 'Uncategorised'),
                  el.category_type
