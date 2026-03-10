@@ -527,9 +527,12 @@ def delete_split_rule(rule_id: int, conn=Depends(get_conn), user: CurrentUser = 
     return {"id": rule_id, "deleted": True, "overrides_removed": overrides_removed}
 
 
-@router.post("/merchants/split-rules/apply")
-def apply_split_rules(conn=Depends(get_conn), user: CurrentUser = Depends(require_admin)):
-    """Apply all split rules, creating overrides for matching transactions."""
+def run_apply_split_rules(conn) -> dict:
+    """Apply all split rules, creating overrides for matching transactions.
+
+    Reusable core logic — called from the API endpoint and from
+    the post-import pipeline.
+    """
     cur = conn.cursor()
 
     # Load rules ordered by priority
@@ -575,6 +578,12 @@ def apply_split_rules(conn=Depends(get_conn), user: CurrentUser = Depends(requir
 
     conn.commit()
     return {"rules_applied": len(rules), "overrides_created": total_created}
+
+
+@router.post("/merchants/split-rules/apply")
+def apply_split_rules(conn=Depends(get_conn), user: CurrentUser = Depends(require_admin)):
+    """Apply all split rules, creating overrides for matching transactions."""
+    return run_apply_split_rules(conn)
 
 
 # ── Merchant Detail ──────────────────────────────────────────────────────────

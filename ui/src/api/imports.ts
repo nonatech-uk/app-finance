@@ -1,5 +1,5 @@
-import { ApiError } from './client'
-import type { CsvPreviewResult, CsvImportResult } from './types'
+import { ApiError, apiFetch } from './client'
+import type { CsvPreviewResult, CsvImportResult, BankivityPreviewResult, BankivityImportResult } from './types'
 
 const BASE_URL = '/api/v1'
 
@@ -41,4 +41,18 @@ export async function confirmCsvImport(
     throw new ApiError(res.status, body)
   }
   return res.json()
+}
+
+export async function bankivityPreview(bank8Path: string): Promise<BankivityPreviewResult> {
+  return apiFetch<BankivityPreviewResult>('/imports/bankivity/preview', {
+    method: 'POST',
+    body: JSON.stringify({ bank8_path: bank8Path }),
+  })
+}
+
+export async function bankivityConfirm(bank8Path: string): Promise<BankivityImportResult> {
+  return apiFetch<BankivityImportResult>('/imports/bankivity/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ bank8_path: bank8Path }),
+  })
 }

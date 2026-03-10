@@ -37,6 +37,7 @@ Thumbs.db
 *.csv
 *.ofx
 *.qif
+file-archive-no-git/
 
 # UI
 ui/node_modules/

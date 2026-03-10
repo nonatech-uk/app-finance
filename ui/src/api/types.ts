@@ -300,6 +300,22 @@ export interface CsvImportResult {
   pipeline: Record<string, unknown>
 }
 
+// ── Bankivity Import ──
+
+export interface BankivityPreviewResult {
+  total: number
+  new_count: number
+  existing_count: number
+  by_account: Record<string, number>
+  path: string
+}
+
+export interface BankivityImportResult {
+  inserted: number
+  skipped: number
+  pipeline: Record<string, unknown>
+}
+
 // ── Stats ──
 
 export interface MonthlyTotal {
@@ -530,6 +546,7 @@ export interface SettingsResponse {
   webhook_receipt_enabled: boolean
   webhook_receipt_secret: string
   webhook_receipt_allowed_senders: string
+  bankivity_last_path: string
 }
 
 export interface SettingsUpdate {

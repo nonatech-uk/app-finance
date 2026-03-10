@@ -468,6 +468,27 @@ class CsvImportResult(BaseModel):
     pipeline: dict = {}
 
 
+# ── Bankivity Import ─────────────────────────────────────────────────────────
+
+
+class BankivityPreviewRequest(BaseModel):
+    bank8_path: str
+
+
+class BankivityPreviewResult(BaseModel):
+    total: int
+    new_count: int
+    existing_count: int
+    by_account: dict[str, int]
+    path: str
+
+
+class BankivityImportResult(BaseModel):
+    inserted: int
+    skipped: int
+    pipeline: dict = {}
+
+
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 
@@ -758,7 +779,7 @@ class SettingsResponse(BaseModel):
     caldav_password_set: bool  # never expose actual password
     # Receipt settings
     receipt_alert_days: int = 7
-    receipt_match_date_tolerance: int = 2
+    receipt_match_date_tolerance: int = 7
     receipt_auto_match_enabled: bool = True
     receipt_amount_tolerance_pct: int = 20
     anthropic_api_key_set: bool = False
@@ -766,6 +787,8 @@ class SettingsResponse(BaseModel):
     webhook_receipt_enabled: bool = False
     webhook_receipt_secret: str = ""
     webhook_receipt_allowed_senders: str = ""
+    # Bankivity import
+    bankivity_last_path: str = ""
 
 
 class SettingsUpdate(BaseModel):

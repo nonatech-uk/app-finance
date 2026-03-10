@@ -1,4 +1,4 @@
-"""CSV import endpoints."""
+"""Import endpoints — CSV and Bankivity."""
 
 import tempfile
 from pathlib import Path
@@ -6,7 +6,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.api.deps import CurrentUser, get_conn, require_admin
-from src.api.models import CsvPreviewResult, CsvPreviewTransaction, CsvMismatch, CsvImportResult
+from src.api.models import (
+    CsvPreviewResult, CsvPreviewTransaction, CsvMismatch, CsvImportResult,
+    BankivityPreviewRequest, BankivityPreviewResult, BankivityImportResult,
+)
 from src.ingestion.csv_dispatch import (
     detect_format,
     parse_csv,
@@ -14,6 +17,7 @@ from src.ingestion.csv_dispatch import (
     execute_import,
     run_post_import,
 )
+from src.ingestion.bankivity import preview_bankivity, execute_bankivity
 
 router = APIRouter()
 
@@ -101,6 +105,62 @@ def csv_confirm(
         pipeline = {"error": str(e)}
 
     return CsvImportResult(
+        inserted=result["inserted"],
+        skipped=result["skipped"],
+        pipeline=pipeline,
+    )
+
+
+# ── Bankivity Import ─────────────────────────────────────────────────────────
+
+
+@router.post("/imports/bankivity/preview", response_model=BankivityPreviewResult)
+def bankivity_preview(
+    body: BankivityPreviewRequest,
+    conn=Depends(get_conn),
+    user: CurrentUser = Depends(require_admin),
+):
+    """Preview what would be imported from a Bankivity .bank8 file."""
+    try:
+        result = preview_bankivity(body.bank8_path, conn)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Failed to read .bank8 file: {e}")
+
+    # Persist last-used path
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO app_setting (key, value, updated_at)
+        VALUES ('bankivity.last_path', %s, now())
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+    """, (body.bank8_path,))
+    conn.commit()
+
+    return BankivityPreviewResult(**result)
+
+
+@router.post("/imports/bankivity/confirm", response_model=BankivityImportResult)
+def bankivity_confirm(
+    body: BankivityPreviewRequest,
+    conn=Depends(get_conn),
+    user: CurrentUser = Depends(require_admin),
+):
+    """Execute the Bankivity import and run the post-import pipeline."""
+    try:
+        result = execute_bankivity(body.bank8_path, conn)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Import failed: {e}")
+
+    # Run cleaning + dedup pipeline
+    try:
+        pipeline = run_post_import()
+    except Exception as e:
+        pipeline = {"error": str(e)}
+
+    return BankivityImportResult(
         inserted=result["inserted"],
         skipped=result["skipped"],
         pipeline=pipeline,

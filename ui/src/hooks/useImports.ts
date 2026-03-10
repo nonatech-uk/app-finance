@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { uploadCsvPreview, confirmCsvImport } from '../api/imports'
+import { uploadCsvPreview, confirmCsvImport, bankivityPreview, bankivityConfirm } from '../api/imports'
 
 export function useCsvPreview() {
   return useMutation({
@@ -25,6 +25,28 @@ export function useCsvConfirm() {
       institution: string
       accountRef: string
     }) => confirmCsvImport(institution, accountRef),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+    },
+  })
+}
+
+export function useBankivityPreview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (bank8Path: string) => bankivityPreview(bank8Path),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    },
+  })
+}
+
+export function useBankivityConfirm() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (bank8Path: string) => bankivityConfirm(bank8Path),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })

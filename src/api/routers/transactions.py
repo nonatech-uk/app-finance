@@ -930,19 +930,27 @@ def bulk_update_category(body: BulkCategoryUpdate, conn=Depends(get_conn), user:
 
 @router.post("/transactions/bulk/merchant-name")
 def bulk_update_merchant_name(body: BulkMerchantNameUpdate, conn=Depends(get_conn), user: CurrentUser = Depends(require_admin)):
-    """Bulk update display_name for all canonical merchants of given transactions."""
+    """Bulk update display_name for the effective canonical merchants of given transactions.
+
+    Uses the override merchant (from transaction_merchant_override) when present,
+    falling back to the base merchant (from merchant_raw_mapping).  This prevents
+    renaming a split-rule sub-merchant from accidentally renaming the shared parent.
+    """
     cur = conn.cursor()
     ids = [str(tid) for tid in body.transaction_ids]
     if not ids:
         return {"ok": True, "affected": 0, "merchant_ids": []}
 
-    # Find distinct canonical_merchant IDs for these transactions
+    # Find the EFFECTIVE canonical merchant for each selected transaction:
+    #   override merchant (split-rule or manual) takes priority over base mapping.
     cur.execute("""
-        SELECT DISTINCT cm.id
+        SELECT DISTINCT COALESCE(tmo.canonical_merchant_id, mrm.canonical_merchant_id) AS effective_id
         FROM raw_transaction rt
         JOIN cleaned_transaction ct ON ct.raw_transaction_id = rt.id
         JOIN merchant_raw_mapping mrm ON mrm.cleaned_merchant = ct.cleaned_merchant
-        JOIN canonical_merchant cm ON cm.id = mrm.canonical_merchant_id
+        LEFT JOIN transaction_merchant_override tmo ON tmo.raw_transaction_id = rt.id
+        JOIN canonical_merchant cm
+          ON cm.id = COALESCE(tmo.canonical_merchant_id, mrm.canonical_merchant_id)
         WHERE rt.id = ANY(%s::uuid[])
           AND cm.merged_into_id IS NULL
     """, (ids,))

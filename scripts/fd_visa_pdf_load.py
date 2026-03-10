@@ -38,6 +38,12 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Card prefix -> account_ref mapping
+CARD_PREFIX_MAP = {
+    '4543 6120': 'fd_8178',   # Joint Visa
+    '4543 6121': 'fd_8897',   # Sole Visa
+}
+
 # --- Date parsing ---
 
 MONTH_MAP = {
@@ -46,27 +52,28 @@ MONTH_MAP = {
     "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 
-# Matches: "16 Jan 26" or "16 Jan 2026"
+# Matches: "16 Jan 26", "16 Jan 2026", "16Jan26", "16.Jun 10" (OCR variants)
 DATE_RE = re.compile(
-    r"(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})",
+    r"(\d{1,2})[\s.,]*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s.,]*(\d{2,4})",
     re.IGNORECASE,
 )
 
 # Statement date: "Statement Date 15 February 2026" or "Statement Date    13 March 2020"
+# Allow 4-5 digit year to catch OCR garbles like "22013" (for 2013)
 STATEMENT_DATE_RE = re.compile(
-    r"Statement\s+Date\s+(\d{1,2})\s+(\w+)\s+(\d{4})",
+    r"Statement\s+Date\s+(\d{1,2})\s+(\w+)\s+(\d{4,5})",
     re.IGNORECASE,
 )
 
 # Amount at end of line: digits with optional comma, decimal point, two digits, optional CR
 # Note: space between amount and CR is common in larger amounts
-AMOUNT_RE = re.compile(r"([\d,]+\.\d{2})\s*(CR)?\s*$")
+# Allow comma as decimal separator (OCR artifact), case-insensitive CR
+AMOUNT_RE = re.compile(r"([\d,]+[.,]\d{2})\s*(CR)?\s*$", re.IGNORECASE)
 
-# Transaction line: starts with a date pattern
+# Transaction line: starts with a date pattern (spaces/punctuation optional for OCR variants)
+_DATE_PAT = r"(\d{1,2}[\s.,]*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s.,]*\d{2,4})"
 TXN_LINE_RE = re.compile(
-    r"^\s*(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4})"
-    r"\s+(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4})"
-    r"\s+(.+)$",
+    rf"^[\s\-=]*{_DATE_PAT}[\s\-—=.]+{_DATE_PAT}[\s.)]+(.+)$",
     re.IGNORECASE,
 )
 
@@ -90,7 +97,7 @@ SKIP_PATTERNS = [
     re.compile(r"Miss Frances", re.IGNORECASE),
     re.compile(r"^\s*Card number", re.IGNORECASE),
     re.compile(r"^\s*Sheet number", re.IGNORECASE),
-    re.compile(r"^\s*4543\s+6121", re.IGNORECASE),
+    re.compile(r"^\s*4543\s+612[01]", re.IGNORECASE),
     re.compile(r"Account Summary", re.IGNORECASE),
     re.compile(r"Credit Lim", re.IGNORECASE),
     re.compile(r"^\s*APR\s", re.IGNORECASE),
@@ -148,18 +155,36 @@ def parse_short_date(date_str: str, statement_year_hint: Optional[int] = None) -
         year = 2000 + year_raw
     else:
         year = year_raw
+    # Fix OCR-garbled years using statement date hint
+    if statement_year_hint:
+        if not (1990 <= year <= 2030) or abs(year - statement_year_hint) > 1:
+            year = statement_year_hint
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-def extract_statement_date(text: str) -> Optional[str]:
-    """Extract statement date from PDF text."""
+def extract_statement_date(text: str, filename_year: Optional[int] = None) -> Optional[str]:
+    """Extract statement date from PDF text.
+
+    If filename_year is provided, it's used to validate/correct OCR-garbled years.
+    """
     m = STATEMENT_DATE_RE.search(text)
     if m:
         day = int(m.group(1))
         month_name = m.group(2).lower()[:3]
         month = MONTH_MAP.get(month_name)
-        year = int(m.group(3))
+        year_str = m.group(3)
+        year = int(year_str)
+        # Handle OCR producing extra digits (e.g. "22013" for "2013")
+        if len(year_str) == 5:
+            # Try last 4 digits first (e.g. "22013" -> "2013")
+            year = int(year_str[1:])
         if month:
+            # Validate against filename year if available
+            if filename_year and abs(year - filename_year) > 1:
+                year = filename_year
+            # Final sanity check
+            if not (1990 <= year <= 2040):
+                return None
             return f"{year:04d}-{month:02d}-{day:02d}"
     return None
 
@@ -190,47 +215,86 @@ def is_continuation_line(line: str) -> bool:
     return False
 
 
-def parse_pdf(filepath: str) -> list[Transaction]:
-    """Extract transactions from a single PDF statement."""
+def detect_account_ref(text: str) -> str:
+    """Detect account_ref from card number prefix in statement text."""
+    for prefix, ref in CARD_PREFIX_MAP.items():
+        if prefix in text:
+            return ref
+    return 'fd_8897'  # fallback
+
+
+def parse_pdf(filepath: str, account_ref_override: str = "") -> tuple[list[Transaction], str]:
+    """Extract transactions from a single PDF statement.
+
+    Returns (transactions, account_ref).
+    """
     result = subprocess.run(
         ["pdftotext", "-layout", filepath, "-"],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
         print(f"  ERROR: pdftotext failed for {filepath}: {result.stderr}")
-        return []
+        return [], ""
 
     text = result.stdout
-    statement_date = extract_statement_date(text) or ""
+
+    # Extract year from filename (e.g. "20130412 First Direct..." -> 2013)
+    fname = Path(filepath).name
+    fname_year_match = re.match(r"(\d{4})", fname)
+    filename_year = int(fname_year_match.group(1)) if fname_year_match else None
+
+    statement_date = extract_statement_date(text, filename_year) or ""
+    stmt_year_hint = int(statement_date[:4]) if len(statement_date) >= 4 else filename_year
+    account_ref = account_ref_override or detect_account_ref(text)
+    is_joint = (account_ref == 'fd_8178')
 
     transactions: list[Transaction] = []
     in_transaction_section = False
     in_second_cardholder = False
+    past_summary = False  # Past the Account Summary header area
 
     lines = text.split("\n")
 
     for i, line in enumerate(lines):
-        # Detect second cardholder section (different card number)
-        if re.search(r"8636\s*2503", line):
+        # Detect second cardholder section
+        # For Joint Visa: include second cardholder transactions
+        # For Sole Visa: skip second cardholder (if present)
+        if re.search(r"Ms\s+Heather|Rutherford", line, re.IGNORECASE):
             in_second_cardholder = True
             continue
 
         # Detect start of transaction section
-        if "Your Transaction Details" in line:
+        if re.search(r"Your\s*Transaction\s+Details", line, re.IGNORECASE):
             in_transaction_section = True
             continue
 
+        # Also detect Received By Us header as start of transaction section
+        if re.search(r"Received\s*By\s*Us", line, re.IGNORECASE):
+            in_transaction_section = True
+            continue
+
+        # Past the statement date header = past the summary section
+        if re.search(r"Statement\s+Date", line, re.IGNORECASE):
+            past_summary = True
+
         # Detect end of transaction section
-        if "Summary Of Interest" in line:
+        if re.search(r"Summary\s*Of\s*Interest", line, re.IGNORECASE):
             in_transaction_section = False
             in_second_cardholder = False
             continue
 
+        # If not in a detected section, try to auto-detect by matching transaction lines
+        if not in_transaction_section and past_summary:
+            # Check if this line looks like a transaction (has two dates + amount)
+            if TXN_LINE_RE.match(line) and AMOUNT_RE.search(line):
+                in_transaction_section = True
+                # Fall through to parse this line
+
         if not in_transaction_section:
             continue
 
-        # Skip in second cardholder section
-        if in_second_cardholder:
+        # Skip second cardholder section only for Sole Visa
+        if in_second_cardholder and not is_joint:
             continue
 
         if should_skip_line(line):
@@ -246,13 +310,19 @@ def parse_pdf(filepath: str) -> list[Transaction]:
             # Extract amount from end of rest
             amount_match = AMOUNT_RE.search(rest)
             if amount_match:
-                amount_str = amount_match.group(1).replace(",", "")
+                raw_amount = amount_match.group(1)
+                # Handle comma as decimal separator (OCR artifact: "806,21")
+                # If last separator before final 2 digits is comma, treat as decimal
+                if raw_amount[-3] == ',':
+                    amount_str = raw_amount[:-3].replace(",", "").replace(".", "") + "." + raw_amount[-2:]
+                else:
+                    amount_str = raw_amount.replace(",", "")
                 is_credit = amount_match.group(2) is not None
                 description = rest[:amount_match.start()].strip()
 
                 try:
-                    received_date = parse_short_date(received_str)
-                    transaction_date = parse_short_date(trans_str)
+                    received_date = parse_short_date(received_str, stmt_year_hint)
+                    transaction_date = parse_short_date(trans_str, stmt_year_hint)
                 except ValueError as e:
                     print(f"  WARNING: {e} in {filepath}")
                     continue
@@ -278,7 +348,7 @@ def parse_pdf(filepath: str) -> list[Transaction]:
             # Append extra detail to last transaction
             transactions[-1].extra_details.append(line.strip())
 
-    return transactions
+    return transactions, account_ref
 
 
 def make_transaction_ref(txn: Transaction, position: int = 0) -> str:
@@ -314,7 +384,7 @@ def write_csv(transactions: list[Transaction], output_path: str):
             ])
 
 
-def load_to_db(transactions: list[Transaction]):
+def load_to_db(transactions: list[Transaction], account_ref: str = 'fd_8897'):
     """Load transactions directly into raw_transaction."""
     import psycopg2
     from config.settings import settings
@@ -343,7 +413,7 @@ def load_to_db(transactions: list[Transaction]):
                 posted_at, amount, currency,
                 raw_merchant, raw_memo, is_dirty, raw_data
             ) VALUES (
-                'first_direct_pdf', 'first_direct', 'fd_8897', %s,
+                'first_direct_pdf', 'first_direct', %s, %s,
                 %s, %s, 'GBP',
                 %s, %s, false, %s
             )
@@ -352,6 +422,7 @@ def load_to_db(transactions: list[Transaction]):
             DO NOTHING
             RETURNING id
         """, (
+            account_ref,
             ref,
             txn.transaction_date,
             txn.amount,
@@ -392,6 +463,10 @@ def main():
         "--load", action="store_true",
         help="Load directly into database instead of CSV"
     )
+    parser.add_argument(
+        "--account-ref",
+        help="Override account_ref (default: auto-detect from card number)"
+    )
     args = parser.parse_args()
 
     # Expand globs
@@ -410,9 +485,11 @@ def main():
     print(f"  Found {len(pdf_files)} PDF files\n")
 
     all_transactions: list[Transaction] = []
+    account_refs_seen: set[str] = set()
 
     for filepath in pdf_files:
-        txns = parse_pdf(filepath)
+        txns, acct_ref = parse_pdf(filepath, args.account_ref or "")
+        account_refs_seen.add(acct_ref)
         fname = Path(filepath).name
         if txns:
             dates = [t.transaction_date for t in txns]
@@ -421,7 +498,7 @@ def main():
             debits = [t for t in txns if not t.is_credit]
             print(f"  {fname}: {len(txns)} txns "
                   f"({len(debits)} debits, {len(credits)} credits) "
-                  f"[{min(dates)} to {max(dates)}]")
+                  f"[{min(dates)} to {max(dates)}] acct={acct_ref}")
         else:
             print(f"  {fname}: 0 txns")
         all_transactions.extend(txns)
@@ -453,8 +530,10 @@ def main():
         return
 
     if args.load:
-        inserted, skipped = load_to_db(all_transactions)
-        print(f"\n  Database: {inserted} inserted, {skipped} skipped (duplicates)")
+        # Group by account_ref for loading
+        acct_ref = args.account_ref or (account_refs_seen.pop() if len(account_refs_seen) == 1 else 'fd_8897')
+        inserted, skipped = load_to_db(all_transactions, acct_ref)
+        print(f"\n  Database ({acct_ref}): {inserted} inserted, {skipped} skipped (duplicates)")
     else:
         output = args.output
         write_csv(all_transactions, output)

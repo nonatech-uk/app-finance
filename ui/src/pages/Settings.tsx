@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSettings, useUpdateSettings } from '../hooks/useSettings'
+import { useBankivityPreview, useBankivityConfirm } from '../hooks/useImports'
+import type { BankivityPreviewResult, BankivityImportResult } from '../api/types'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
 export default function Settings() {
@@ -25,6 +27,13 @@ export default function Settings() {
   const [webhookAllowedSenders, setWebhookAllowedSenders] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // Bankivity import
+  const [bank8Path, setBank8Path] = useState('')
+  const [bankPreviewResult, setBankPreviewResult] = useState<BankivityPreviewResult | null>(null)
+  const [bankImportResult, setBankImportResult] = useState<BankivityImportResult | null>(null)
+  const bankPreview = useBankivityPreview()
+  const bankConfirm = useBankivityConfirm()
+
   // Sync form state when data loads
   useEffect(() => {
     if (data) {
@@ -40,6 +49,7 @@ export default function Settings() {
       setAnthropicKeyDirty(false)
       setWebhookEnabled(data.webhook_receipt_enabled)
       setWebhookAllowedSenders(data.webhook_receipt_allowed_senders)
+      if (data.bankivity_last_path) setBank8Path(data.bankivity_last_path)
     }
   }, [data])
 
@@ -113,6 +123,123 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-2xl">
       <h2 className="text-xl font-semibold text-text-primary">Settings</h2>
+
+      {/* Bankivity Import */}
+      <div className="bg-bg-card border border-border rounded-lg p-5 space-y-5">
+        <div>
+          <h3 className="text-base font-medium text-text-primary">Bankivity Import</h3>
+          <p className="text-sm text-text-secondary mt-1">
+            Import First Direct transactions from Bankivity's Salt Edge connection.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">.bank8 file path</label>
+            <input
+              type="text"
+              value={bank8Path}
+              onChange={e => {
+                setBank8Path(e.target.value)
+                setBankPreviewResult(null)
+                setBankImportResult(null)
+              }}
+              placeholder="/path/to/NonaFinance.bank8"
+              className="w-full px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono"
+            />
+          </div>
+
+          {/* Preview results */}
+          {bankPreviewResult && !bankImportResult && (
+            <div className="text-sm text-text-primary space-y-1">
+              <p>
+                Found {bankPreviewResult.total} transactions
+                {' '}({bankPreviewResult.new_count} new,{' '}
+                {bankPreviewResult.existing_count} existing)
+              </p>
+              {Object.entries(bankPreviewResult.by_account).map(([acct, count]) => (
+                <p key={acct} className="text-text-secondary pl-3">
+                  {acct}: {count} new
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Import result */}
+          {bankImportResult && (
+            <div className="text-sm space-y-1">
+              <p className="text-green-400">
+                Imported {bankImportResult.inserted} transactions
+                {bankImportResult.skipped > 0 && ` (${bankImportResult.skipped} skipped)`}
+              </p>
+            </div>
+          )}
+
+          {/* Error display */}
+          {(bankPreview.isError || bankConfirm.isError) && (
+            <p className="text-sm text-red-400">
+              {(bankPreview.error as Error)?.message || (bankConfirm.error as Error)?.message}
+            </p>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3">
+            {!bankPreviewResult ? (
+              <button
+                type="button"
+                disabled={!bank8Path.trim() || bankPreview.isPending}
+                onClick={() => {
+                  setBankImportResult(null)
+                  bankPreview.mutate(bank8Path.trim(), {
+                    onSuccess: (result) => setBankPreviewResult(result),
+                  })
+                }}
+                className="px-4 py-1.5 text-sm font-medium rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+              >
+                {bankPreview.isPending ? 'Reading...' : 'Preview Import'}
+              </button>
+            ) : !bankImportResult ? (
+              <>
+                <button
+                  type="button"
+                  disabled={bankConfirm.isPending || bankPreviewResult.new_count === 0}
+                  onClick={() => {
+                    bankConfirm.mutate(bank8Path.trim(), {
+                      onSuccess: (result) => {
+                        setBankImportResult(result)
+                        setBankPreviewResult(null)
+                      },
+                    })
+                  }}
+                  className="px-4 py-1.5 text-sm font-medium rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+                >
+                  {bankConfirm.isPending
+                    ? 'Importing...'
+                    : `Import ${bankPreviewResult.new_count} Transaction${bankPreviewResult.new_count !== 1 ? 's' : ''}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBankPreviewResult(null)}
+                  className="px-4 py-1.5 text-sm font-medium rounded-md bg-bg-secondary border border-border text-text-primary hover:bg-bg-hover transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setBankImportResult(null)
+                  setBankPreviewResult(null)
+                }}
+                className="px-4 py-1.5 text-sm font-medium rounded-md bg-bg-secondary border border-border text-text-primary hover:bg-bg-hover transition-colors"
+              >
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Receipt Management */}
       <div className="bg-bg-card border border-border rounded-lg p-5 space-y-5">

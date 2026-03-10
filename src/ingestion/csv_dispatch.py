@@ -250,13 +250,14 @@ def execute_import(txns: list[dict], fmt: str, conn) -> dict:
 
 
 def run_post_import() -> dict:
-    """Run cleaning + dedup pipeline after import.
+    """Run cleaning + dedup + split-rule pipeline after import.
 
     Each module manages its own DB connection.
     """
     from src.cleaning.processor import process_all
     from src.cleaning.matcher import match_all
     from src.dedup.matcher import find_duplicates
+    from src.api.routers.merchants import run_apply_split_rules
 
     cleaning_stats = process_all()
     match_all()
@@ -264,10 +265,12 @@ def run_post_import() -> dict:
     conn = psycopg2.connect(settings.dsn)
     try:
         dedup_stats = find_duplicates(conn)
+        split_stats = run_apply_split_rules(conn)
     finally:
         conn.close()
 
     return {
         "cleaning": cleaning_stats or {},
         "dedup": dedup_stats or {},
+        "split_rules": split_stats or {},
     }

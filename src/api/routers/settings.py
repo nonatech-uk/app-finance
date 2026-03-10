@@ -15,6 +15,7 @@ SETTING_KEYS = {
     "anthropic.api_key",
     "webhook.receipt_enabled", "webhook.receipt_secret",
     "webhook.receipt_allowed_senders",
+    "bankivity.last_path",
 }
 
 
@@ -32,7 +33,7 @@ def _to_response(raw: dict[str, str]) -> SettingsResponse:
         caldav_password_set=bool(raw.get("caldav.password", "")),
         # Receipt settings
         receipt_alert_days=int(raw.get("receipt.alert_days", "7")),
-        receipt_match_date_tolerance=int(raw.get("receipt.match_date_tolerance", "2")),
+        receipt_match_date_tolerance=int(raw.get("receipt.match_date_tolerance", "7")),
         receipt_auto_match_enabled=raw.get("receipt.auto_match_enabled", "true").lower() == "true",
         receipt_amount_tolerance_pct=int(raw.get("receipt.amount_tolerance_pct", "20")),
         anthropic_api_key_set=bool(raw.get("anthropic.api_key", "")),
@@ -40,6 +41,8 @@ def _to_response(raw: dict[str, str]) -> SettingsResponse:
         webhook_receipt_enabled=raw.get("webhook.receipt_enabled", "false").lower() == "true",
         webhook_receipt_secret=raw.get("webhook.receipt_secret", ""),
         webhook_receipt_allowed_senders=raw.get("webhook.receipt_allowed_senders", ""),
+        # Bankivity import
+        bankivity_last_path=raw.get("bankivity.last_path", ""),
     )
 
 

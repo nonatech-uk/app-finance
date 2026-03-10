@@ -118,7 +118,8 @@ def overview(
                COALESCE(a.display_name, a.account_ref) AS label
         FROM account a
         WHERE NOT a.is_archived AND {ov_scope_cond}
-        ORDER BY COALESCE(a.display_name, a.account_ref)
+        ORDER BY a.display_order ASC NULLS LAST,
+               COALESCE(a.display_name, a.account_ref)
     """, ov_scope_params)
     accounts = [
         AccountOption(institution=r[0], account_ref=r[1], label=r[2])
