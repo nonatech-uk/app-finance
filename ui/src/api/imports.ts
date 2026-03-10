@@ -1,4 +1,4 @@
-import { ApiError, apiFetch } from './client'
+import { ApiError } from './client'
 import type { CsvPreviewResult, CsvImportResult, BankivityPreviewResult, BankivityImportResult } from './types'
 
 const BASE_URL = '/api/v1'
