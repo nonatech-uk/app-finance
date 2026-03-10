@@ -28,7 +28,7 @@ export default function Settings() {
   const [copied, setCopied] = useState(false)
 
   // Bankivity import
-  const [bank8Path, setBank8Path] = useState('')
+  const [bank8File, setBank8File] = useState<File | null>(null)
   const [bankPreviewResult, setBankPreviewResult] = useState<BankivityPreviewResult | null>(null)
   const [bankImportResult, setBankImportResult] = useState<BankivityImportResult | null>(null)
   const bankPreview = useBankivityPreview()
@@ -49,7 +49,6 @@ export default function Settings() {
       setAnthropicKeyDirty(false)
       setWebhookEnabled(data.webhook_receipt_enabled)
       setWebhookAllowedSenders(data.webhook_receipt_allowed_senders)
-      if (data.bankivity_last_path) setBank8Path(data.bankivity_last_path)
     }
   }, [data])
 
@@ -135,18 +134,35 @@ export default function Settings() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-text-secondary mb-1">.bank8 file path</label>
-            <input
-              type="text"
-              value={bank8Path}
-              onChange={e => {
-                setBank8Path(e.target.value)
-                setBankPreviewResult(null)
-                setBankImportResult(null)
+            <label className="block text-sm text-text-secondary mb-1">Bankivity database</label>
+            <div
+              onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-accent') }}
+              onDragLeave={e => { e.currentTarget.classList.remove('border-accent') }}
+              onDrop={e => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('border-accent')
+                const file = e.dataTransfer.files[0]
+                if (file) {
+                  setBank8File(file)
+                  setBankPreviewResult(null)
+                  setBankImportResult(null)
+                }
               }}
-              placeholder="/path/to/NonaFinance.bank8"
-              className="w-full px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono"
-            />
+              className="border-2 border-dashed border-border rounded-lg p-4 text-center transition-colors"
+            >
+              {bank8File ? (
+                <p className="text-sm text-text-primary">{bank8File.name}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-text-secondary">
+                    Drop <code className="text-text-primary">core.sql</code> here
+                  </p>
+                  <p className="text-xs text-text-secondary/60 mt-1">
+                    Right-click .bank8 → Show Package Contents → StoreContent
+                  </p>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Preview results */}
@@ -187,10 +203,11 @@ export default function Settings() {
             {!bankPreviewResult ? (
               <button
                 type="button"
-                disabled={!bank8Path.trim() || bankPreview.isPending}
+                disabled={!bank8File || bankPreview.isPending}
                 onClick={() => {
+                  if (!bank8File) return
                   setBankImportResult(null)
-                  bankPreview.mutate(bank8Path.trim(), {
+                  bankPreview.mutate(bank8File, {
                     onSuccess: (result) => setBankPreviewResult(result),
                   })
                 }}
@@ -204,7 +221,7 @@ export default function Settings() {
                   type="button"
                   disabled={bankConfirm.isPending || bankPreviewResult.new_count === 0}
                   onClick={() => {
-                    bankConfirm.mutate(bank8Path.trim(), {
+                    bankConfirm.mutate(undefined, {
                       onSuccess: (result) => {
                         setBankImportResult(result)
                         setBankPreviewResult(null)
@@ -231,6 +248,7 @@ export default function Settings() {
                 onClick={() => {
                   setBankImportResult(null)
                   setBankPreviewResult(null)
+                  setBank8File(null)
                 }}
                 className="px-4 py-1.5 text-sm font-medium rounded-md bg-bg-secondary border border-border text-text-primary hover:bg-bg-hover transition-colors"
               >

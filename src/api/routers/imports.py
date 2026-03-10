@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from src.api.deps import CurrentUser, get_conn, require_admin
 from src.api.models import (
     CsvPreviewResult, CsvPreviewTransaction, CsvMismatch, CsvImportResult,
-    BankivityPreviewRequest, BankivityPreviewResult, BankivityImportResult,
+    BankivityPreviewResult, BankivityImportResult,
 )
 from src.ingestion.csv_dispatch import (
     detect_format,
@@ -17,7 +17,7 @@ from src.ingestion.csv_dispatch import (
     execute_import,
     run_post_import,
 )
-from src.ingestion.bankivity import preview_bankivity, execute_bankivity
+from src.ingestion.bankivity import preview_bankivity_file, execute_bankivity_file
 
 router = APIRouter()
 
@@ -114,45 +114,71 @@ def csv_confirm(
 # ── Bankivity Import ─────────────────────────────────────────────────────────
 
 
+# In-memory store for uploaded bankivity SQLite between preview and confirm.
+_pending_bankivity: bytes | None = None
+
+
 @router.post("/imports/bankivity/preview", response_model=BankivityPreviewResult)
 def bankivity_preview(
-    body: BankivityPreviewRequest,
+    file: UploadFile = File(...),
     conn=Depends(get_conn),
     user: CurrentUser = Depends(require_admin),
 ):
-    """Preview what would be imported from a Bankivity .bank8 file."""
+    """Preview what would be imported from a Bankivity core.sql file."""
+    global _pending_bankivity
+    file_bytes = file.file.read()
+    if not file_bytes:
+        raise HTTPException(400, "Empty file")
+
+    # Write to temp file for SQLite to read
+    with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+
     try:
-        result = preview_bankivity(body.bank8_path, conn)
+        result = preview_bankivity_file(tmp_path, conn)
     except ValueError as e:
+        Path(tmp_path).unlink(missing_ok=True)
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, f"Failed to read .bank8 file: {e}")
+        Path(tmp_path).unlink(missing_ok=True)
+        raise HTTPException(500, f"Failed to read file: {e}")
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
-    # Persist last-used path
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO app_setting (key, value, updated_at)
-        VALUES ('bankivity.last_path', %s, now())
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-    """, (body.bank8_path,))
-    conn.commit()
+    # Stash bytes for confirm step
+    _pending_bankivity = file_bytes
 
     return BankivityPreviewResult(**result)
 
 
 @router.post("/imports/bankivity/confirm", response_model=BankivityImportResult)
 def bankivity_confirm(
-    body: BankivityPreviewRequest,
     conn=Depends(get_conn),
     user: CurrentUser = Depends(require_admin),
 ):
-    """Execute the Bankivity import and run the post-import pipeline."""
+    """Execute the Bankivity import using previously previewed file."""
+    global _pending_bankivity
+    if _pending_bankivity is None:
+        raise HTTPException(400, "No pending import. Upload a file for preview first.")
+
+    file_bytes = _pending_bankivity
+    _pending_bankivity = None
+
+    with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+
     try:
-        result = execute_bankivity(body.bank8_path, conn)
+        result = execute_bankivity_file(tmp_path, conn)
     except ValueError as e:
+        Path(tmp_path).unlink(missing_ok=True)
         raise HTTPException(400, str(e))
     except Exception as e:
+        Path(tmp_path).unlink(missing_ok=True)
         raise HTTPException(500, f"Import failed: {e}")
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
     # Run cleaning + dedup pipeline
     try:

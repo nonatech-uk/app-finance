@@ -27,15 +27,10 @@ def _resolve_db_path(bank8_path: str) -> Path:
     return db_path
 
 
-def preview_bankivity(bank8_path: str, conn) -> dict:
-    """Validate path, extract transactions, compare against DB.
+def _preview(db_path: str, conn) -> dict:
+    """Extract transactions from SQLite and compare against DB."""
+    txns = extract_transactions(db_path)
 
-    Returns counts and by_account breakdown without writing anything.
-    """
-    db_path = _resolve_db_path(bank8_path)
-    txns = extract_transactions(str(db_path))
-
-    # Find which transaction_refs already exist in the DB
     refs = [t["transaction_ref"] for t in txns]
     if refs:
         cur = conn.cursor()
@@ -61,12 +56,33 @@ def preview_bankivity(bank8_path: str, conn) -> dict:
         "new_count": len(new_txns),
         "existing_count": len(existing_refs),
         "by_account": by_account,
-        "path": bank8_path,
+        "path": db_path,
     }
 
 
+def preview_bankivity(bank8_path: str, conn) -> dict:
+    """Validate .bank8 directory path, extract and preview transactions."""
+    db_path = _resolve_db_path(bank8_path)
+    return _preview(str(db_path), conn)
+
+
+def preview_bankivity_file(sql_path: str, conn) -> dict:
+    """Preview transactions from an uploaded core.sql file."""
+    if not Path(sql_path).exists():
+        raise ValueError(f"File does not exist: {sql_path}")
+    return _preview(sql_path, conn)
+
+
 def execute_bankivity(bank8_path: str, conn) -> dict:
-    """Extract and write transactions. Returns {inserted, skipped}."""
+    """Extract and write transactions from .bank8 directory."""
     db_path = _resolve_db_path(bank8_path)
     txns = extract_transactions(str(db_path))
+    return write_transactions(txns, conn)
+
+
+def execute_bankivity_file(sql_path: str, conn) -> dict:
+    """Extract and write transactions from an uploaded core.sql file."""
+    if not Path(sql_path).exists():
+        raise ValueError(f"File does not exist: {sql_path}")
+    txns = extract_transactions(sql_path)
     return write_transactions(txns, conn)

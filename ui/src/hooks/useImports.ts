@@ -34,19 +34,15 @@ export function useCsvConfirm() {
 }
 
 export function useBankivityPreview() {
-  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (bank8Path: string) => bankivityPreview(bank8Path),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] })
-    },
+    mutationFn: (file: File) => bankivityPreview(file),
   })
 }
 
 export function useBankivityConfirm() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (bank8Path: string) => bankivityConfirm(bank8Path),
+    mutationFn: () => bankivityConfirm(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })

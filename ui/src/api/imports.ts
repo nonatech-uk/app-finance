@@ -43,16 +43,28 @@ export async function confirmCsvImport(
   return res.json()
 }
 
-export async function bankivityPreview(bank8Path: string): Promise<BankivityPreviewResult> {
-  return apiFetch<BankivityPreviewResult>('/imports/bankivity/preview', {
+export async function bankivityPreview(file: File): Promise<BankivityPreviewResult> {
+  const form = new FormData()
+  form.append('file', file)
+
+  const res = await fetch(`${BASE_URL}/imports/bankivity/preview`, {
     method: 'POST',
-    body: JSON.stringify({ bank8_path: bank8Path }),
+    body: form,
   })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new ApiError(res.status, body)
+  }
+  return res.json()
 }
 
-export async function bankivityConfirm(bank8Path: string): Promise<BankivityImportResult> {
-  return apiFetch<BankivityImportResult>('/imports/bankivity/confirm', {
+export async function bankivityConfirm(): Promise<BankivityImportResult> {
+  const res = await fetch(`${BASE_URL}/imports/bankivity/confirm`, {
     method: 'POST',
-    body: JSON.stringify({ bank8_path: bank8Path }),
   })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new ApiError(res.status, body)
+  }
+  return res.json()
 }
