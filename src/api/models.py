@@ -587,8 +587,9 @@ class StockTradeCreate(BaseModel):
     trade_type: str
     trade_date: date
     quantity: Decimal
-    price_per_share: Decimal
+    price_per_share: Decimal | None = None
     fees: Decimal = Decimal("0")
+    gbp_total_cost: Decimal | None = None
     notes: str | None = None
 
 

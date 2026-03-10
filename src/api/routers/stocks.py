@@ -25,9 +25,11 @@ router = APIRouter()
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None) -> dict:
-    """Enrich a holding dict with computed shares, cost, and P&L."""
+def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None,
+                        fx_rates: dict | None = None) -> dict:
+    """Enrich a holding dict with computed shares, cost, P&L, and GBP valuations."""
     hid = str(holding_row["id"])
+    currency = holding_row.get("currency", "GBP")
 
     # Compute current shares and total cost from trades
     cur.execute("""
@@ -35,7 +37,8 @@ def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None) -> d
             COALESCE(SUM(CASE WHEN trade_type = 'buy' THEN quantity ELSE -quantity END), 0) AS current_shares,
             COALESCE(SUM(CASE WHEN trade_type = 'buy' THEN total_cost ELSE 0 END), 0) AS buy_cost,
             COALESCE(SUM(CASE WHEN trade_type = 'sell' THEN quantity ELSE 0 END), 0) AS sold_shares,
-            COALESCE(SUM(CASE WHEN trade_type = 'sell' THEN total_cost ELSE 0 END), 0) AS sell_proceeds
+            COALESCE(SUM(CASE WHEN trade_type = 'sell' THEN total_cost ELSE 0 END), 0) AS sell_proceeds,
+            COALESCE(SUM(CASE WHEN trade_type = 'buy' THEN gbp_total_cost ELSE 0 END), 0) AS gbp_buy_cost
         FROM stock_trade WHERE holding_id = %s
     """, (hid,))
     row = cur.fetchone()
@@ -45,6 +48,7 @@ def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None) -> d
     current_shares = stats["current_shares"]
     buy_cost = stats["buy_cost"]
     sold_shares = stats["sold_shares"]
+    gbp_buy_cost = stats["gbp_buy_cost"]
 
     # Average cost per share (from buys only)
     total_bought = current_shares + sold_shares
@@ -53,9 +57,26 @@ def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None) -> d
     # Cost basis for currently held shares
     total_cost = avg_cost * current_shares
 
+    # GBP cost basis (proportion of gbp_buy_cost for currently held shares)
+    if total_bought > 0 and gbp_buy_cost:
+        gbp_avg_cost = gbp_buy_cost / total_bought
+        gbp_total_cost = gbp_avg_cost * current_shares
+    else:
+        gbp_total_cost = None
+
     holding_row["current_shares"] = str(current_shares)
     holding_row["average_cost"] = str(avg_cost.quantize(Decimal("0.01")))
     holding_row["total_cost"] = str(total_cost.quantize(Decimal("0.01")))
+    holding_row["gbp_total_cost"] = str(gbp_total_cost.quantize(Decimal("0.01"))) if gbp_total_cost else None
+
+    # FX rate for this holding's currency
+    fx_rate = None
+    if currency == "GBP":
+        fx_rate = Decimal("1")
+    elif fx_rates and currency in fx_rates:
+        fx_rate = fx_rates[currency]["rate"]
+
+    holding_row["fx_rate"] = str(fx_rate) if fx_rate else None
 
     # Price data
     price_info = (prices or {}).get(hid)
@@ -69,12 +90,32 @@ def _holding_with_stats(cur, holding_row: dict, prices: dict | None = None) -> d
         holding_row["unrealised_pnl"] = str(pnl.quantize(Decimal("0.01")))
         holding_row["unrealised_pnl_pct"] = str(pnl_pct.quantize(Decimal("0.01")))
         holding_row["price_date"] = str(price_info["price_date"])
+
+        # GBP valuation
+        if fx_rate:
+            gbp_value = value * fx_rate
+            holding_row["gbp_current_value"] = str(gbp_value.quantize(Decimal("0.01")))
+            if gbp_total_cost and gbp_total_cost > 0:
+                gbp_pnl = gbp_value - gbp_total_cost
+                gbp_pnl_pct = (gbp_pnl / gbp_total_cost * 100)
+                holding_row["gbp_pnl"] = str(gbp_pnl.quantize(Decimal("0.01")))
+                holding_row["gbp_pnl_pct"] = str(gbp_pnl_pct.quantize(Decimal("0.01")))
+            else:
+                holding_row["gbp_pnl"] = None
+                holding_row["gbp_pnl_pct"] = None
+        else:
+            holding_row["gbp_current_value"] = None
+            holding_row["gbp_pnl"] = None
+            holding_row["gbp_pnl_pct"] = None
     else:
         holding_row["current_price"] = None
         holding_row["current_value"] = None
         holding_row["unrealised_pnl"] = None
         holding_row["unrealised_pnl_pct"] = None
         holding_row["price_date"] = None
+        holding_row["gbp_current_value"] = None
+        holding_row["gbp_pnl"] = None
+        holding_row["gbp_pnl_pct"] = None
 
     return holding_row
 
@@ -91,9 +132,10 @@ def list_holdings(
     """List all holdings with computed stats."""
     cur = conn.cursor()
 
-    # Get latest prices
-    from src.stocks.prices import get_latest_prices
+    # Get latest prices and FX rates
+    from src.stocks.prices import get_latest_prices, get_latest_fx_rates
     prices = get_latest_prices(conn)
+    fx_rates = get_latest_fx_rates(conn)
 
     conditions = ["is_active"]
     params: dict = {}
@@ -110,7 +152,7 @@ def list_holdings(
     for row in rows:
         item = dict(zip(columns, row))
         item["id"] = str(item["id"])
-        item = _holding_with_stats(cur, item, prices)
+        item = _holding_with_stats(cur, item, prices, fx_rates)
         items.append(item)
 
     return {"items": items}
@@ -134,9 +176,10 @@ def get_holding_detail(
     holding = dict(zip(columns, row))
     holding["id"] = str(holding["id"])
 
-    from src.stocks.prices import get_latest_prices
+    from src.stocks.prices import get_latest_prices, get_latest_fx_rates
     prices = get_latest_prices(conn)
-    holding = _holding_with_stats(cur, holding, prices)
+    fx_rates = get_latest_fx_rates(conn)
+    holding = _holding_with_stats(cur, holding, prices, fx_rates)
 
     # Trade history
     cur.execute("""
@@ -154,6 +197,7 @@ def get_holding_detail(
         t["price_per_share"] = str(t["price_per_share"])
         t["total_cost"] = str(t["total_cost"])
         t["fees"] = str(t["fees"])
+        t["gbp_total_cost"] = str(t["gbp_total_cost"]) if t.get("gbp_total_cost") else None
         t["trade_date"] = str(t["trade_date"])
         t["created_at"] = t["created_at"].isoformat()
         trades.append(t)
@@ -252,21 +296,30 @@ def create_trade(
     if body.trade_type not in ("buy", "sell"):
         raise HTTPException(400, "trade_type must be 'buy' or 'sell'")
 
-    # Compute total_cost: quantity * price + fees for buy, quantity * price - fees for sell
-    total = body.quantity * body.price_per_share
+    # For foreign holdings, price_per_share is optional (user may only know GBP cost)
+    price_per_share = body.price_per_share or Decimal("0")
+
+    # Compute total_cost in native currency
+    total = body.quantity * price_per_share
     if body.trade_type == "buy":
         total_cost = total + body.fees
     else:
         total_cost = total - body.fees
 
+    # GBP total cost
+    gbp_total_cost = body.gbp_total_cost
+    if gbp_total_cost is None and currency == "GBP":
+        # Auto-set for GBP holdings
+        gbp_total_cost = total_cost
+
     cur.execute("""
         INSERT INTO stock_trade (holding_id, trade_type, trade_date, quantity,
-                                  price_per_share, total_cost, fees, currency, notes)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                  price_per_share, total_cost, fees, currency, gbp_total_cost, notes)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """, (
         holding_id, body.trade_type, body.trade_date, body.quantity,
-        body.price_per_share, total_cost, body.fees, currency, body.notes,
+        price_per_share, total_cost, body.fees, currency, gbp_total_cost, body.notes,
     ))
     columns = [d[0] for d in cur.description]
     row = cur.fetchone()
@@ -279,6 +332,7 @@ def create_trade(
     trade["price_per_share"] = str(trade["price_per_share"])
     trade["total_cost"] = str(trade["total_cost"])
     trade["fees"] = str(trade["fees"])
+    trade["gbp_total_cost"] = str(trade["gbp_total_cost"]) if trade.get("gbp_total_cost") else None
     trade["trade_date"] = str(trade["trade_date"])
     trade["created_at"] = trade["created_at"].isoformat()
     return trade
@@ -311,8 +365,9 @@ def get_portfolio(
     """Portfolio summary: total value, cost, unrealised P&L."""
     cur = conn.cursor()
 
-    from src.stocks.prices import get_latest_prices
+    from src.stocks.prices import get_latest_prices, get_latest_fx_rates
     prices = get_latest_prices(conn)
+    fx_rates = get_latest_fx_rates(conn)
 
     conditions = ["is_active"]
     params: dict = {}
@@ -328,18 +383,26 @@ def get_portfolio(
     holdings = []
     total_value = Decimal("0")
     total_cost = Decimal("0")
+    total_gbp_value = Decimal("0")
+    total_gbp_cost = Decimal("0")
     latest_price_date = None
 
     for row in rows:
         item = dict(zip(columns, row))
         item["id"] = str(item["id"])
-        item = _holding_with_stats(cur, item, prices)
+        item = _holding_with_stats(cur, item, prices, fx_rates)
         holdings.append(item)
 
         if item["current_value"]:
             total_value += Decimal(item["current_value"])
         if item["total_cost"]:
             total_cost += Decimal(item["total_cost"])
+        if item.get("gbp_current_value"):
+            total_gbp_value += Decimal(item["gbp_current_value"])
+        if item.get("gbp_total_cost"):
+            total_gbp_cost += Decimal(item["gbp_total_cost"])
+        # Only include in aggregate P&L if both value and cost are known
+        # (individual holding gbp_pnl already handles this)
         if item["price_date"]:
             pd = item["price_date"]
             if isinstance(pd, str):
@@ -350,11 +413,25 @@ def get_portfolio(
     pnl = total_value - total_cost
     pnl_pct = (pnl / total_cost * 100) if total_cost > 0 else Decimal("0")
 
+    # GBP P&L: only aggregate from holdings that have both gbp value and cost
+    gbp_pnl_value = Decimal("0")
+    gbp_pnl_cost = Decimal("0")
+    for item in holdings:
+        if item.get("gbp_pnl") is not None:
+            gbp_pnl_value += Decimal(item["gbp_current_value"])
+            gbp_pnl_cost += Decimal(item["gbp_total_cost"])
+    gbp_pnl = gbp_pnl_value - gbp_pnl_cost
+    gbp_pnl_pct = (gbp_pnl / gbp_pnl_cost * 100) if gbp_pnl_cost > 0 else Decimal("0")
+
     return {
         "total_value": str(total_value.quantize(Decimal("0.01"))),
         "total_cost": str(total_cost.quantize(Decimal("0.01"))),
         "unrealised_pnl": str(pnl.quantize(Decimal("0.01"))),
         "unrealised_pnl_pct": str(pnl_pct.quantize(Decimal("0.01"))),
+        "total_gbp_value": str(total_gbp_value.quantize(Decimal("0.01"))),
+        "total_gbp_cost": str(total_gbp_cost.quantize(Decimal("0.01"))),
+        "gbp_pnl": str(gbp_pnl.quantize(Decimal("0.01"))),
+        "gbp_pnl_pct": str(gbp_pnl_pct.quantize(Decimal("0.01"))),
         "holdings": holdings,
         "price_date": str(latest_price_date) if latest_price_date else None,
     }

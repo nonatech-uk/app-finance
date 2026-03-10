@@ -47,7 +47,7 @@ export function useCreateHolding() {
 export function useCreateTrade() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ holdingId, ...data }: { holdingId: string; trade_type: string; trade_date: string; quantity: string; price_per_share: string; fees?: string; notes?: string }) =>
+    mutationFn: ({ holdingId, ...data }: { holdingId: string; trade_type: string; trade_date: string; quantity: string; price_per_share?: string; fees?: string; gbp_total_cost?: string; notes?: string }) =>
       createTrade(holdingId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stocks'] }),
   })

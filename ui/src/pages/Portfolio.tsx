@@ -29,6 +29,7 @@ export default function Portfolio() {
 
   const pnl = parseFloat(data?.unrealised_pnl || '0')
   const pnlPct = data?.unrealised_pnl_pct || '0'
+  const gbpPnl = parseFloat(data?.gbp_pnl || '0')
 
   return (
     <div className="space-y-6">
@@ -109,19 +110,19 @@ export default function Portfolio() {
       {data && (
         <div className="grid grid-cols-3 gap-4">
           <StatCard
-            label="Total Value"
-            value={`$${parseFloat(data.total_value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`}
+            label="GBP Value"
+            value={`£${parseFloat(data.total_gbp_value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`}
             subtitle={data.price_date ? `as of ${data.price_date}` : undefined}
           />
           <StatCard
-            label="Total Cost"
-            value={`$${parseFloat(data.total_cost).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`}
+            label="GBP Cost"
+            value={parseFloat(data.total_gbp_cost) > 0 ? `£${parseFloat(data.total_gbp_cost).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
           />
           <StatCard
-            label="Unrealised P&L"
-            value={`${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString('en-GB', { minimumFractionDigits: 2 })}`}
-            subtitle={`${parseFloat(pnlPct) >= 0 ? '+' : ''}${pnlPct}%`}
-            className={pnl >= 0 ? 'border-income/30' : 'border-expense/30'}
+            label="GBP P&L"
+            value={gbpPnl !== 0 ? `${gbpPnl >= 0 ? '+' : ''}£${gbpPnl.toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
+            subtitle={gbpPnl !== 0 ? `${parseFloat(data.gbp_pnl_pct) >= 0 ? '+' : ''}${data.gbp_pnl_pct}%` : undefined}
+            className={gbpPnl !== 0 ? (gbpPnl >= 0 ? 'border-income/30' : 'border-expense/30') : undefined}
           />
         </div>
       )}
@@ -135,15 +136,16 @@ export default function Portfolio() {
                 <th className="text-left px-4 py-2.5 font-medium text-text-secondary">Name</th>
                 <th className="text-right px-4 py-2.5 font-medium text-text-secondary">Shares</th>
                 <th className="text-right px-4 py-2.5 font-medium text-text-secondary">Price</th>
-                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">Value</th>
-                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">Cost</th>
-                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">P&L</th>
+                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">GBP Value</th>
+                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">GBP Cost</th>
+                <th className="text-right px-4 py-2.5 font-medium text-text-secondary">GBP P&L</th>
                 <th className="text-right px-4 py-2.5 font-medium text-text-secondary">%</th>
               </tr>
             </thead>
             <tbody>
               {data.holdings.map(h => {
-                const pnlVal = parseFloat(h.unrealised_pnl || '0')
+                const gbpPnlVal = parseFloat(h.gbp_pnl || '0')
+                const ccySymbol = h.currency === 'GBP' ? '' : h.currency + ' '
                 return (
                   <tr key={h.id} className="border-b border-border last:border-0 hover:bg-bg-hover">
                     <td className="px-4 py-2.5">
@@ -154,21 +156,25 @@ export default function Portfolio() {
                     <td className="px-4 py-2.5 text-text-secondary">{h.name}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{parseFloat(h.current_shares || '0')}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      {h.current_price ? `$${parseFloat(h.current_price).toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      {h.current_value ? `$${parseFloat(h.current_value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      {h.total_cost ? `$${parseFloat(h.total_cost).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {h.unrealised_pnl ? (
-                        <CurrencyAmount amount={h.unrealised_pnl} currency="USD" />
+                      {h.current_price ? (
+                        <span title={h.fx_rate && h.currency !== 'GBP' ? `FX: 1 ${h.currency} = £${parseFloat(h.fx_rate).toFixed(4)}` : undefined}>
+                          {ccySymbol}{parseFloat(h.current_price).toFixed(2)}
+                        </span>
                       ) : '-'}
                     </td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${pnlVal >= 0 ? 'text-income' : 'text-expense'}`}>
-                      {h.unrealised_pnl_pct ? `${pnlVal >= 0 ? '+' : ''}${h.unrealised_pnl_pct}%` : '-'}
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {h.gbp_current_value ? `£${parseFloat(h.gbp_current_value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {h.gbp_total_cost ? `£${parseFloat(h.gbp_total_cost).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : '-'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {h.gbp_pnl ? (
+                        <CurrencyAmount amount={h.gbp_pnl} currency="GBP" />
+                      ) : '-'}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${gbpPnlVal >= 0 ? 'text-income' : 'text-expense'}`}>
+                      {h.gbp_pnl_pct ? `${gbpPnlVal >= 0 ? '+' : ''}${h.gbp_pnl_pct}%` : '-'}
                     </td>
                   </tr>
                 )

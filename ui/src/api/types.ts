@@ -376,6 +376,11 @@ export interface StockHoldingItem {
   unrealised_pnl: string | null
   unrealised_pnl_pct: string | null
   price_date: string | null
+  gbp_total_cost: string | null
+  gbp_current_value: string | null
+  gbp_pnl: string | null
+  gbp_pnl_pct: string | null
+  fx_rate: string | null
 }
 
 export interface StockHoldingList {
@@ -392,6 +397,7 @@ export interface StockTradeItem {
   total_cost: string
   fees: string
   currency: string
+  gbp_total_cost: string | null
   notes: string | null
   created_at: string
 }
@@ -401,6 +407,10 @@ export interface PortfolioSummary {
   total_cost: string
   unrealised_pnl: string
   unrealised_pnl_pct: string
+  total_gbp_value: string
+  total_gbp_cost: string
+  gbp_pnl: string
+  gbp_pnl_pct: string
   holdings: StockHoldingItem[]
   price_date: string | null
 }
