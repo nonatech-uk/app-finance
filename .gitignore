@@ -38,6 +38,7 @@ Thumbs.db
 *.ofx
 *.qif
 file-archive-no-git/
+receipts/
 
 # UI
 ui/node_modules/
