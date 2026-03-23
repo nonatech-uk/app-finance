@@ -120,6 +120,13 @@ Container running on `192.168.128.9`. Syncs Monzo + Wise transactions daily at 3
 - **`deploy/run.sh`** — Build + run with secrets from `/zfs/Apps/AppData/finance/`.
 - **`deploy/finance-sync.timer`** — Systemd timer, 3am daily.
 
+### Container Build Notes
+- The Containerfile runs `tsc -b && vite build` which enforces strict TypeScript checking — stricter than the dev server's `vite dev` which skips type checking.
+- If the container build fails with TS errors (unused variables, type mismatches), fix them in the source before rebuilding. Common issues:
+  - `TS6133`: Unused variables/imports — remove them
+  - `TS2345`: Type assignability — ensure function signatures match usage (e.g. optional vs required fields)
+- After building, restart with `systemctl restart finance.service`
+
 ### Key Design Decisions
 - Monzo auth uses `headless=True` for daily sync — only attempts token refresh. Raises `AuthRequiredError` if interactive flow needed.
 - Re-auth available at `https://finance.mees.st/` from any LAN device.
