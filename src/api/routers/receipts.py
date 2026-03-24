@@ -20,6 +20,7 @@ from src.api.models import (
     ReceiptItem,
     ReceiptList,
     ReceiptMatchRequest,
+    ReceiptMetadataImport,
     ReceiptUpdate,
 )
 
@@ -225,6 +226,81 @@ def upload_receipt(
     )
 
     cur = conn.cursor()
+    return _load_receipt_detail(cur, receipt_id, conn)
+
+
+# ── Metadata Import (pipeline integration) ───────────────────────────────────
+
+
+@router.post("/receipts/import-metadata", response_model=ReceiptDetail)
+def import_receipt_metadata(
+    body: ReceiptMetadataImport,
+    conn=Depends(get_conn),
+):
+    """Import a receipt from structured metadata — no OCR needed.
+
+    Used by the ingestion pipeline which has already classified and
+    extracted fields. Optionally accepts base64 file bytes.
+    """
+    cur = conn.cursor()
+
+    # Determine file details
+    mime_type = body.mime_type or "application/octet-stream"
+    file_bytes = None
+    file_size = 0
+    if body.file_bytes:
+        file_bytes = base64.b64decode(body.file_bytes)
+        file_size = len(file_bytes)
+
+    # Create receipt row
+    cur.execute("""
+        INSERT INTO receipt (
+            original_filename, mime_type, file_size, file_path,
+            source, notes,
+            ocr_status, ocr_data,
+            extracted_date, extracted_amount, extracted_currency, extracted_merchant,
+            match_status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+    """, (
+        body.original_filename, mime_type, file_size, "metadata_only",
+        body.source, body.note,
+        "imported", json.dumps(body.ocr_data) if body.ocr_data else None,
+        str(body.extracted_date) if body.extracted_date else None,
+        str(body.extracted_amount) if body.extracted_amount else None,
+        body.extracted_currency,
+        body.extracted_merchant,
+        "pending_match",
+    ))
+    receipt_id = cur.fetchone()[0]
+
+    # Save file if provided
+    if file_bytes:
+        ext = EXT_MAP.get(mime_type, "")
+        year_month = date.today().strftime("%Y/%m")
+        rel_path = f"{year_month}/{receipt_id}{ext}"
+        abs_path = _storage_root() / rel_path
+        _ensure_dir(abs_path)
+        abs_path.write_bytes(file_bytes)
+
+        thumb_rel = None
+        thumb_path = _storage_root() / f"{year_month}/{receipt_id}_thumb.jpg"
+        if _make_thumbnail(abs_path, thumb_path, mime_type):
+            thumb_rel = f"{year_month}/{receipt_id}_thumb.jpg"
+
+        cur.execute("""
+            UPDATE receipt SET file_path = %s, thumbnail_path = %s WHERE id = %s
+        """, (rel_path, thumb_rel, str(receipt_id)))
+
+    conn.commit()
+
+    # Attempt auto-match
+    try:
+        from src.receipts.matcher import auto_match_receipt
+        auto_match_receipt(conn, receipt_id)
+    except Exception:
+        log.exception("Auto-match failed for imported receipt %s", receipt_id)
+
     return _load_receipt_detail(cur, receipt_id, conn)
 
 

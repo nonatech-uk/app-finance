@@ -858,6 +858,20 @@ class ReceiptUpdate(BaseModel):
     extracted_merchant: str | None = None
 
 
+class ReceiptMetadataImport(BaseModel):
+    """Structured metadata import from external pipeline (skips OCR)."""
+    original_filename: str
+    source: str = "pipeline"
+    extracted_date: date | None = None
+    extracted_amount: Decimal | None = None
+    extracted_currency: str | None = None
+    extracted_merchant: str | None = None
+    ocr_data: dict | None = None
+    file_bytes: str | None = None  # optional base64-encoded file content
+    mime_type: str | None = None
+    note: str | None = None
+
+
 class ReceiptMatchRequest(BaseModel):
     transaction_id: UUID
 
