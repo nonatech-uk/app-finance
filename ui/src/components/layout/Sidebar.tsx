@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useScope } from '../../contexts/ScopeContext'
+import AppSwitcher from './AppSwitcher'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '◫' },
@@ -31,7 +32,10 @@ export default function Sidebar() {
   return (
     <aside className="w-52 bg-bg-secondary border-r border-border flex flex-col shrink-0">
       <div className="p-4 border-b border-border">
-        <h1 className="text-lg font-bold text-accent">Finance</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-accent">Finance</h1>
+          <AppSwitcher />
+        </div>
         {showSwitcher && (
           <div className="flex gap-1 mt-2">
             {visibleScopes.map(s => (
