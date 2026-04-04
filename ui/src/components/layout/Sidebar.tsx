@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: '/tags', label: 'Tags', icon: '⊷' },
   { to: '/tag-rules', label: 'Tag Rules', icon: '⊟' },
   { to: '/receipts', label: 'Receipts', icon: '⊘' },
+  { to: '/splitwise', label: 'Splitwise', icon: '⇅' },
 ]
 
 const SCOPE_OPTIONS = [

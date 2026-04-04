@@ -16,6 +16,7 @@ import TagRules from './pages/TagRules'
 import Tags from './pages/Tags'
 import Settings from './pages/Settings'
 import Receipts from './pages/Receipts'
+import Splitwise from './pages/Splitwise'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/tags" element={<Tags />} />
             <Route path="/tag-rules" element={<TagRules />} />
             <Route path="/receipts" element={<Receipts />} />
+            <Route path="/splitwise" element={<Splitwise />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<div className="text-text-secondary">Page not found</div>} />
           </Routes>

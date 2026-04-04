@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     monzo_token_url: str = "https://api.monzo.com/oauth2/token"
     monzo_api_base: str = "https://api.monzo.com"
 
+    # Splitwise
+    splitwise_api_key: str = ""
+    splitwise_api_base: str = "https://secure.splitwise.com/api/v3.0"
+    splitwise_default_group_id: int = 0
+
     # Xero
     xero_client_id: str = ""
     xero_client_secret: str = ""

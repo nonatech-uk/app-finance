@@ -243,6 +243,8 @@ def main():
         print(f"  ERROR applying tag rules: {e}")
         traceback.print_exc()
 
+    # Step 7.5: Splitwise sync — removed, now manual via UI at /splitwise
+
     # Step 8: Link ATM cash withdrawals
     print("\nStep 8: Link ATM cash withdrawals...")
     try:
