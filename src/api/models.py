@@ -125,6 +125,7 @@ class TransactionDetail(TransactionItem):
     dedup_group: DedupGroupInfo | None = None
     economic_event: EconomicEventInfo | None = None
     split_lines: list[SplitLineItem] = []
+    paypal_matches: list["PayPalMatchItem"] = []
 
 
 class NoteUpdate(BaseModel):
@@ -902,3 +903,42 @@ class CashTransactionCreate(BaseModel):
 class CashBalanceReset(BaseModel):
     target_balance: Decimal
     posted_at: date
+
+
+# ── PayPal ───────────────────────────────────────────────────────────────────
+
+
+class PayPalTransaction(BaseModel):
+    id: UUID
+    paypal_transaction_id: str
+    paypal_order_id: str | None
+    transaction_type: str
+    description: str
+    amount: float | None
+    fee: float | None
+    net_amount: float | None
+    currency: str
+    counterparty: str | None
+    counterparty_email: str | None
+    transaction_date: str | None
+    status: str | None
+
+
+class PayPalMatchItem(BaseModel):
+    id: UUID
+    paypal_transaction_id: UUID
+    raw_transaction_id: UUID
+    match_confidence: float | None
+    matched_at: str
+    # Denormalized from paypal_transaction for display
+    pp_description: str | None = None
+    pp_amount: float | None = None
+    pp_fee: float | None = None
+    pp_currency: str | None = None
+    pp_counterparty: str | None = None
+    pp_date: str | None = None
+
+
+class PayPalMatchCreate(BaseModel):
+    paypal_transaction_id: UUID
+    raw_transaction_id: UUID

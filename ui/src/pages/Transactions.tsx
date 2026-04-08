@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTransactions, useTransaction, useUpdateNote, useUpdateTransactionCategory, useLinkTransfer, useUnlinkEvent, useAllTags, useAddTag, useRemoveTag, useBulkUpdateCategory, useBulkUpdateMerchantName, useBulkAddTags, useBulkRemoveTag, useBulkReplaceTags, useBulkUpdateNote, useSaveSplit, useDeleteSplit, useSuggestAmazonSplit } from '../hooks/useTransactions'
 import { useUpdateMerchantName } from '../hooks/useMerchants'
 import { useCategories } from '../hooks/useCategories'
@@ -469,6 +470,11 @@ export function TransactionDetailContent({ detail }: { detail: import('../api/ty
       {/* Economic event / Transfer linking */}
       <TransferSection detail={detail} />
 
+      {/* PayPal matches */}
+      {detail.paypal_matches && detail.paypal_matches.length > 0 && (
+        <PayPalSection matches={detail.paypal_matches} transactionId={detail.id} />
+      )}
+
       {/* Raw data */}
       {detail.raw_data && (
         <section>
@@ -700,6 +706,48 @@ function TransferSection({ detail }: { detail: TransactionDetail }) {
       ) : (
         <div className="text-text-secondary text-xs italic">No linked transfer</div>
       )}
+    </section>
+  )
+}
+
+// ── PayPal Matches ──────────────────────────────────────────────────────────
+
+function PayPalSection({ matches, transactionId }: { matches: TransactionDetail['paypal_matches']; transactionId: string }) {
+  const queryClient = useQueryClient()
+
+  const handleUnmatch = async (matchId: string) => {
+    const { unmatchPayPal } = await import('../api/transactions')
+    await unmatchPayPal(matchId)
+    queryClient.invalidateQueries({ queryKey: ['transaction', transactionId] })
+  }
+
+  return (
+    <section>
+      <h4 className="text-xs uppercase text-text-secondary mb-2">PayPal</h4>
+      <div className="space-y-2">
+        {matches.map((m) => (
+          <div key={m.id} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span>{m.pp_description || m.paypal_transaction_id}</span>
+              {m.pp_amount != null && (
+                <span className="text-text-secondary">
+                  {m.pp_currency || 'GBP'} {m.pp_amount.toFixed(2)}
+                </span>
+              )}
+              {m.pp_fee != null && m.pp_fee !== 0 && (
+                <span className="text-text-secondary text-xs">(fee: {m.pp_fee.toFixed(2)})</span>
+              )}
+              {m.pp_counterparty && (
+                <span className="text-text-secondary text-xs">{m.pp_counterparty}</span>
+              )}
+              {m.pp_date && (
+                <span className="text-text-secondary text-xs">{m.pp_date.slice(0, 10)}</span>
+              )}
+            </div>
+            <button onClick={() => handleUnmatch(m.id)} className="text-xs text-red-400 hover:underline">Unlink</button>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

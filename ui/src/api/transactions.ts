@@ -164,3 +164,25 @@ export interface AmazonSplitSuggestion {
 export function suggestAmazonSplit(id: string) {
   return apiFetch<AmazonSplitSuggestion>(`/transactions/${id}/split/suggest-amazon`)
 }
+
+// ── PayPal ──
+
+import type { PayPalTransaction, PayPalMatchItem } from './types'
+
+export function searchPayPal(params: { q?: string; type?: string }): Promise<PayPalTransaction[]> {
+  const qs = new URLSearchParams()
+  if (params.q) qs.set('q', params.q)
+  if (params.type) qs.set('type', params.type)
+  return apiFetch(`/paypal/search?${qs}`)
+}
+
+export function matchPayPal(data: { paypal_transaction_id: string; raw_transaction_id: string }): Promise<PayPalMatchItem> {
+  return apiFetch(`/paypal/match`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function unmatchPayPal(matchId: string): Promise<void> {
+  return apiFetch(`/paypal/match/${matchId}`, { method: 'DELETE' })
+}

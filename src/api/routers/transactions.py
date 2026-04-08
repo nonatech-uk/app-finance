@@ -353,12 +353,35 @@ def get_transaction(
     split_cols = [desc[0] for desc in cur.description]
     split_lines = [SplitLineItem(**dict(zip(split_cols, r))) for r in cur.fetchall()]
 
+    # PayPal matches
+    cur.execute("""
+        SELECT pm.id, pm.paypal_transaction_id, pm.raw_transaction_id,
+               pm.match_confidence, pm.matched_at,
+               pt.description, pt.amount, pt.fee, pt.currency,
+               pt.counterparty, pt.transaction_date
+        FROM paypal_transaction_match pm
+        JOIN paypal_transaction pt ON pt.id = pm.paypal_transaction_id
+        WHERE pm.raw_transaction_id = %s
+        ORDER BY pt.transaction_date DESC
+    """, (str(transaction_id),))
+    paypal_matches = [
+        {
+            "id": r[0], "paypal_transaction_id": r[1], "raw_transaction_id": r[2],
+            "match_confidence": float(r[3]) if r[3] else None, "matched_at": str(r[4]),
+            "pp_description": r[5], "pp_amount": float(r[6]) if r[6] else None,
+            "pp_fee": float(r[7]) if r[7] else None, "pp_currency": r[8],
+            "pp_counterparty": r[9], "pp_date": str(r[10]) if r[10] else None,
+        }
+        for r in cur.fetchall()
+    ]
+
     return TransactionDetail(
         **txn_data,
         tags=tags,
         dedup_group=dedup_group,
         economic_event=economic_event,
         split_lines=split_lines,
+        paypal_matches=paypal_matches,
     )
 
 

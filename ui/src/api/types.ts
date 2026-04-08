@@ -89,6 +89,37 @@ export interface TransactionDetail extends Omit<TransactionItem, 'tags'> {
   dedup_group: DedupGroupInfo | null
   economic_event: EconomicEventInfo | null
   split_lines: SplitLineItem[]
+  paypal_matches: PayPalMatchItem[]
+}
+
+export interface PayPalTransaction {
+  id: string
+  paypal_transaction_id: string
+  paypal_order_id: string | null
+  transaction_type: string
+  description: string
+  amount: number | null
+  fee: number | null
+  net_amount: number | null
+  currency: string
+  counterparty: string | null
+  counterparty_email: string | null
+  transaction_date: string | null
+  status: string | null
+}
+
+export interface PayPalMatchItem {
+  id: string
+  paypal_transaction_id: string
+  raw_transaction_id: string
+  match_confidence: number | null
+  matched_at: string
+  pp_description: string | null
+  pp_amount: number | null
+  pp_fee: number | null
+  pp_currency: string | null
+  pp_counterparty: string | null
+  pp_date: string | null
 }
 
 // ── Bulk Operations ──

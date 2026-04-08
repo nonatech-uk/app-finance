@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     xero_bank_account_id: str = ""
     xero_default_account_code: str = "400"
 
+    # PayPal
+    paypal_client_id: str = ""
+    paypal_client_secret: str = ""
+    paypal_environment: str = "live"
+
+    # Healthcheck UUIDs
+    hc_paypal_sync: str = ""
+
     # Anthropic (for LLM categorisation)
     anthropic_api_key: str = ""
 
