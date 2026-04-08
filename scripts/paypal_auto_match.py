@@ -23,7 +23,7 @@ import psycopg2
 
 from config.settings import settings
 
-DATE_TOLERANCE_DAYS = 3
+DATE_TOLERANCE_DAYS = 5
 
 
 def auto_match(conn, dry_run: bool) -> dict:
