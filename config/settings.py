@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     db_password: str = ""
     db_sslmode: str = "require"
 
+    # Cross-DB (stuff — for Amazon order lookups)
+    stuff_db_name: str = "stuff"
+    stuff_db_user: str = "stuff"
+    stuff_db_password: str = ""
+
     # Wise
     wise_api_token: str = ""
     wise_api_base: str = "https://api.wise.com"
@@ -81,6 +86,18 @@ class Settings(BaseSettings):
         return (
             f"host={self.db_host} port={self.db_port} dbname={self.db_name} "
             f"user={self.db_user} password={self.db_password} sslmode={self.db_sslmode}"
+        )
+
+    def cross_dsn(self, db_name: str, db_user: str, db_password: str) -> str:
+        return (
+            f"host={self.db_host} port={self.db_port} dbname={db_name} "
+            f"user={db_user} password={db_password} sslmode={self.db_sslmode}"
+        )
+
+    @property
+    def stuff_dsn(self) -> str:
+        return self.cross_dsn(
+            self.stuff_db_name, self.stuff_db_user, self.stuff_db_password,
         )
 
 

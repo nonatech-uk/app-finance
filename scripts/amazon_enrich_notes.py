@@ -28,29 +28,51 @@ def build_notes(conn) -> dict:
     """Build note text for each matched active transaction.
 
     Returns {raw_transaction_id: {"note": str, "order_ids": [str]}}
+
+    Reads matches from finance DB and order items from stuff DB (cross-DB).
     """
     cur = conn.cursor()
 
-    # Get all matches that point to active transactions, with item details
+    # Step 1: Get matches from finance DB
     cur.execute("""
-        SELECT am.raw_transaction_id, am.order_id,
-               aoi.description, aoi.unit_price, aoi.quantity, aoi.currency
+        SELECT am.raw_transaction_id, am.order_id
         FROM amazon_order_match am
         JOIN active_transaction at ON at.id = am.raw_transaction_id
-        JOIN amazon_order_item aoi ON aoi.order_id = am.order_id
-        WHERE aoi.unit_price IS NOT NULL
-        ORDER BY am.raw_transaction_id, am.order_id, aoi.description
+        ORDER BY am.raw_transaction_id, am.order_id
     """)
+    matches = cur.fetchall()
+    if not matches:
+        return {}
 
-    # Group: txn_id -> order_id -> [items]
+    # Collect unique order IDs
+    order_ids = list({row[1] for row in matches})
+
+    # Step 2: Fetch order items from stuff DB (cross-DB)
+    stuff_conn = psycopg2.connect(settings.stuff_dsn)
+    try:
+        stuff_cur = stuff_conn.cursor()
+        stuff_cur.execute("""
+            SELECT order_id, description, unit_price, quantity, currency
+            FROM amazon_order_item
+            WHERE order_id = ANY(%s) AND unit_price IS NOT NULL
+            ORDER BY order_id, description
+        """, (order_ids,))
+        items_by_order = defaultdict(list)
+        for order_id, desc, price, qty, currency in stuff_cur.fetchall():
+            items_by_order[order_id].append({
+                "description": desc,
+                "price": price,
+                "quantity": qty,
+                "currency": currency or "GBP",
+            })
+    finally:
+        stuff_conn.close()
+
+    # Step 3: Combine matches with items
     txn_orders = defaultdict(lambda: defaultdict(list))
-    for txn_id, order_id, desc, price, qty, currency in cur.fetchall():
-        txn_orders[str(txn_id)][order_id].append({
-            "description": desc,
-            "price": price,
-            "quantity": qty,
-            "currency": currency or "GBP",
-        })
+    for txn_id, order_id in matches:
+        for item in items_by_order.get(order_id, []):
+            txn_orders[str(txn_id)][order_id].append(item)
 
     results = {}
     for txn_id, orders in txn_orders.items():

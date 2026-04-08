@@ -4,8 +4,10 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+import psycopg2
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from config.settings import settings
 from src.api.deps import CurrentUser, get_conn, get_current_user, require_admin, scope_condition, validate_scope
 from src.api.models import (
     BulkCategoryUpdate,
@@ -876,17 +878,23 @@ def suggest_amazon_split(
     if not order_ids:
         raise HTTPException(404, "No Amazon order match found for this transaction")
 
-    # Fetch order items
-    cur.execute("""
-        SELECT description, unit_price, quantity, category
-        FROM amazon_order_item
-        WHERE order_id = ANY(%s) AND unit_price IS NOT NULL
-        ORDER BY order_id, description
-    """, (order_ids,))
+    # Fetch order items from stuff database (cross-DB)
+    stuff_conn = psycopg2.connect(settings.stuff_dsn)
+    try:
+        stuff_cur = stuff_conn.cursor()
+        stuff_cur.execute("""
+            SELECT description, unit_price, quantity, category
+            FROM amazon_order_item
+            WHERE order_id = ANY(%s) AND unit_price IS NOT NULL
+            ORDER BY order_id, description
+        """, (order_ids,))
+        order_items = stuff_cur.fetchall()
+    finally:
+        stuff_conn.close()
 
     lines = []
     items_total = Decimal("0")
-    for desc, unit_price, quantity, category in cur.fetchall():
+    for desc, unit_price, quantity, category in order_items:
         line_amount = -(unit_price * quantity)  # negative = expense
         items_total += line_amount
         lines.append({
