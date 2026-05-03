@@ -17,7 +17,7 @@ from starlette.routing import Route, Router
 
 log = logging.getLogger(__name__)
 
-from src.api import deps
+from mees_shared import db as _shared_db
 from src.caldav.queries import (
     get_caldav_settings,
     get_ctag,
@@ -58,12 +58,12 @@ async def _log_request(request: Request, label: str) -> bytes:
 
 
 def _get_conn():
-    assert deps.pool is not None, "Connection pool not initialised"
-    return deps.pool.getconn()
+    assert _shared_db.pool is not None, "Connection pool not initialised"
+    return _shared_db.pool.getconn()
 
 
 def _put_conn(conn):
-    deps.pool.putconn(conn)
+    _shared_db.pool.putconn(conn)
 
 
 def _dav_headers() -> dict:

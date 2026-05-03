@@ -11,9 +11,20 @@
 
 set -euo pipefail
 
+# Run from project root regardless of where this script was invoked from.
+cd "$(dirname "$0")/.."
+
 IMAGE="finance-sync:latest"
 CONTAINER="finance-sync"
 SECRETS_DIR="/zfs/Apps/AppData/finance"
+
+# Stage shared libraries into build context (gitignored peers)
+echo "Staging shared libraries..."
+rm -rf mees-shared-py mees-shared-ui
+cp -r ../mees-shared-py .
+cp -r ../mees-shared-ui .
+rm -rf mees-shared-py/.git mees-shared-ui/.git mees-shared-ui/node_modules
+trap 'rm -rf mees-shared-py mees-shared-ui' EXIT
 
 # Build
 echo "Building $IMAGE..."
