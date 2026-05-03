@@ -221,7 +221,7 @@ def run_source_hints(conn, *, dry_run: bool = False) -> dict:
 def run_llm(conn, *, dry_run: bool = False) -> dict:
     """Phase 3: LLM categorisation for remaining uncategorised merchants.
 
-    Uses same auto-accept/queue pattern as run_source_hints().
+    categorise_batch now persists per-batch internally.
     """
     try:
         from src.categorisation.llm_categoriser import categorise_batch
@@ -229,43 +229,7 @@ def run_llm(conn, *, dry_run: bool = False) -> dict:
         print("  LLM categoriser not available (missing anthropic package?)")
         return {"llm_auto_accepted": 0, "llm_queued": 0}
 
-    suggestions = categorise_batch(conn, dry_run=dry_run)
-    if not suggestions or dry_run:
-        return {"llm_auto_accepted": 0, "llm_queued": 0}
-
-    auto_accepted = [s for s in suggestions if s['confidence'] >= AUTO_ACCEPT_THRESHOLD]
-    queued = [s for s in suggestions if s['confidence'] < AUTO_ACCEPT_THRESHOLD]
-
-    print(f"  LLM auto-accept (>={AUTO_ACCEPT_THRESHOLD}): {len(auto_accepted)}")
-    print(f"  LLM queue for review: {len(queued)}")
-
-    cur = conn.cursor()
-
-    accepted_count = 0
-    for s in auto_accepted:
-        cur.execute("""
-            UPDATE canonical_merchant
-            SET category_hint = (SELECT full_path FROM category WHERE id = %s),
-                category_method = 'llm',
-                category_confidence = %s,
-                category_set_at = now()
-            WHERE id = %s AND category_hint IS NULL
-        """, (s['suggested_category_id'], s['confidence'], s['canonical_merchant_id']))
-        accepted_count += cur.rowcount
-
-    queued_count = 0
-    for s in queued:
-        cur.execute("""
-            INSERT INTO category_suggestion
-                (canonical_merchant_id, suggested_category_id, method, confidence, reasoning)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-        """, (s['canonical_merchant_id'], s['suggested_category_id'], s['method'], s['confidence'], s['reasoning']))
-        queued_count += cur.rowcount
-
-    conn.commit()
-    print(f"  LLM: {accepted_count} auto-accepted, {queued_count} queued")
-    return {"llm_auto_accepted": accepted_count, "llm_queued": queued_count}
+    return categorise_batch(conn, dry_run=dry_run)
 
 
 def run_fuzzy_merge(conn, *, dry_run: bool = False) -> dict:
