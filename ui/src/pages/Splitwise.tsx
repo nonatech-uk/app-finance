@@ -510,7 +510,7 @@ const TABS = [
 type TabKey = typeof TABS[number]['key']
 
 export default function Splitwise() {
-  const [tab, setTab] = useState<TabKey>('incoming')
+  const [tab, setTab] = useState<TabKey>('outgoing')
 
   return (
     <div className="flex flex-col h-full">

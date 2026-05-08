@@ -402,11 +402,14 @@ def list_groups(
     sw_user = sw_get_current_user()
     groups = get_groups()
 
+    # Hide groups inactive for 6+ months. Splitwise has no "settled" flag, but
+    # `updated_at` distinguishes a settled-and-forgotten trip from a brand-new
+    # empty group (both have zero debts) — new groups have updated_at = today.
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=183)).isoformat()
+
     results = []
     for g in groups:
-        # Skip settled groups (no outstanding debts)
-        debts = g.get("simplified_debts") or g.get("original_debts") or []
-        if not debts and g.get("id") != 0:
+        if g.get("id") != 0 and (g.get("updated_at") or "") < cutoff:
             continue
 
         members = []
@@ -491,14 +494,15 @@ def push_expense(
     sw_user = sw_get_current_user()
     payer_user_id = sw_user["id"]
 
-    # Build splits for selected members
+    # Build splits for selected members. Distribute rounding remainder cent-by-cent
+    # so shares sum exactly to cost (Splitwise rejects mismatches >0).
     member_count = len(body.member_ids)
-    per_person = abs(float(amount)) / member_count
-    per_person_str = f"{per_person:.2f}"
-
+    total_cents = int(round(abs(float(amount)) * 100))
+    base_cents, extra = divmod(total_cents, member_count)
     splits = []
-    for mid in body.member_ids:
-        splits.append({"user_id": mid, "owed_share": per_person_str})
+    for i, mid in enumerate(body.member_ids):
+        share_cents = base_cents + (1 if i < extra else 0)
+        splits.append({"user_id": mid, "owed_share": f"{share_cents / 100:.2f}"})
 
     created = create_expense(
         cost=cost_str,
